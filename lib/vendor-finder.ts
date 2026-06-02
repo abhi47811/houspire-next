@@ -2,28 +2,34 @@ import { getAnthropicClient } from "./anthropic";
 import { getSupabaseClient } from "./supabase";
 import type { VendorRow, RoomAnalysis } from "./types";
 
+// RULE: Never return fabricated contact data.
+// DB vendors have phone="NA - verify on Google Maps" and rating="Unverified — check Google Maps"
+// until a human or scraper confirms them. Do NOT override these with generated values.
 async function fetchVendorsFromDB(city: string): Promise<VendorRow[]> {
   try {
     const db = getSupabaseClient();
     const { data } = await db
       .from("vendors_db")
-      .select("*")
+      .select("category,vendor,specialty,area,lat,lng,rating,phone,is_verified")
       .eq("city", city)
       .order("category")
       .limit(50);
     if (!data || data.length === 0) return [];
     return (data as Array<{
       category: string; vendor: string; specialty: string;
-      area: string; lat: number; lng: number; rating: string; phone: string;
+      area: string; lat: number; lng: number; rating: string; phone: string; is_verified: boolean;
     }>).map((v) => ({
       category: v.category,
       vendor: v.vendor,
-      specialty: v.specialty || "",
+      // Append unverified warning to specialty so it's visible in the output
+      specialty: v.is_verified
+        ? (v.specialty || "")
+        : `${v.specialty || ""} ⚠ Contact unverified — confirm via Google Maps before use`,
       area: v.area || "",
       lat: v.lat || 0,
       lng: v.lng || 0,
-      rating: v.rating || "",
-      phone: v.phone || "",
+      rating: v.rating || "Unverified",
+      phone: v.phone || "NA - verify on Google Maps",
     }));
   } catch {
     return [];
@@ -114,7 +120,7 @@ export async function generateVendors(
     if (categoriesWithEnough >= 3) {
       return {
         vendors: dbVendors,
-        notes: `Vendors sourced from Houspire verified database for ${city}. All vendors have been pre-verified. 3-5 vendors per category, nearest-first within each.`,
+        notes: `⚠ IMPORTANT — CONTACT DETAILS UNVERIFIED:\nThese vendors are sourced from Houspire's seed database and have NOT been verified via Google Maps or direct contact. Before sending this list to a client:\n1. Search each vendor on Google Maps to confirm they exist\n2. Verify phone numbers are correct\n3. Check current ratings and reviews\n4. Mark verified vendors in the admin panel\n\nVendor areas and specialties are based on market research for ${city}. Use as a starting point only.`,
       };
     }
   }
