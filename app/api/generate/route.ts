@@ -5,11 +5,12 @@ import { saveProject } from "@/lib/db";
 import type { RoomAnalysis } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
-  const { rooms, city, pincode, tier }: {
+  const { rooms, city, pincode, tier, client_name }: {
     rooms: RoomAnalysis[];
     city: string;
     pincode: string;
     tier: string;
+    client_name?: string;
   } = await req.json();
 
   const [boqResult, vendorResult] = await Promise.all([
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   ]);
 
   const projectId = await saveProject(
-    rooms[0]?.image_filename?.split("_")[0] ?? "Project",
+    client_name || rooms[0]?.image_filename?.split("_")[0] || "Project",
     city, pincode, tier,
     boqResult.rows, boqResult.sources,
     vendorResult.vendors, vendorResult.notes,
