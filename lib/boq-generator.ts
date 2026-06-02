@@ -2,6 +2,61 @@ import { getAnthropicClient } from "./anthropic";
 import { getSupabaseClient } from "./supabase";
 import type { BOQRow, RateSource, RoomAnalysis } from "./types";
 
+// Fetch brands unavailable in a city to warn Claude not to specify them
+async function fetchUnavailableBrands(city: string): Promise<string> {
+  try {
+    const db = getSupabaseClient();
+    const { data } = await db
+      .from("city_brand_availability")
+      .select("brand,note")
+      .eq("city", city)
+      .eq("available", false);
+    if (!data || data.length === 0) return "";
+    const list = (data as Array<{ brand: string; note: string }>)
+      .map((r) => `- ${r.brand}: ${r.note || "not available locally"}`)
+      .join("\n");
+    return `\nBRAND AVAILABILITY WARNINGS for ${city} — do NOT specify these brands:\n${list}\nUse alternative brands or add note "supply from nearest city".`;
+  } catch {
+    return "";
+  }
+}
+
+// Build a rate lookup map for confidence scoring
+async function fetchRateLookup(city: string): Promise<Map<string, { min: number; max: number }>> {
+  try {
+    const db = getSupabaseClient();
+    const [rates, mults] = await Promise.all([
+      db.from("rates").select("item,rate_min,rate_max"),
+      db.from("city_multipliers").select("multiplier").eq("city", city).single(),
+    ]);
+    const multiplier = (mults.data as { multiplier: number } | null)?.multiplier ?? 1.0;
+    const map = new Map<string, { min: number; max: number }>();
+    (rates.data ?? []).forEach((r: { item: string; rate_min: number; rate_max: number }) => {
+      map.set(r.item.toLowerCase(), {
+        min: r.rate_min * multiplier * 0.8,  // 20% tolerance
+        max: r.rate_max * multiplier * 1.2,
+      });
+    });
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function scoreConfidence(rate: number, description: string, lookup: Map<string, { min: number; max: number }>): "high" | "medium" | "low" {
+  const desc = description.toLowerCase();
+  for (const [item, range] of lookup) {
+    if (desc.includes(item.split(" ")[0]) && rate >= range.min && rate <= range.max) {
+      return "high";
+    }
+  }
+  // Rate exists but outside tolerance → medium; no match → low
+  for (const [item, _] of lookup) {
+    if (desc.includes(item.split(" ")[0])) return "medium";
+  }
+  return "low";
+}
+
 async function fetchRateLibrary(city: string): Promise<string> {
   try {
     const db = getSupabaseClient();
@@ -83,8 +138,13 @@ export async function generateBOQ(
   tier: string,
 ): Promise<{ rows: BOQRow[]; sources: RateSource[] }> {
   const client = getAnthropicClient();
-  const rateLibrary = await fetchRateLibrary(city);
-  const systemPrompt = BOQ_SYSTEM_PROMPT.replace("{{RATE_LIBRARY}}", rateLibrary || "Use standard Indian interior rates for the given city and tier.");
+  const [rateLibrary, brandWarnings, rateLookup] = await Promise.all([
+    fetchRateLibrary(city),
+    fetchUnavailableBrands(city),
+    fetchRateLookup(city),
+  ]);
+  const rateSection = (rateLibrary || "Use standard Indian interior rates for the given city and tier.") + brandWarnings;
+  const systemPrompt = BOQ_SYSTEM_PROMPT.replace("{{RATE_LIBRARY}}", rateSection);
   const resp = await client.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 4096,
@@ -112,6 +172,7 @@ export async function generateBOQ(
         unit: String(r.unit || "nos"),
         qty: Number(r.qty),
         rate: Number(r.rate),
+        confidence: scoreConfidence(Number(r.rate), String(r.description), rateLookup),
       }));
 
     const sources: RateSource[] = (parsed.sources ?? [])

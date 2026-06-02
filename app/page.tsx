@@ -344,6 +344,7 @@ export default function HomePage() {
                     <th className="px-3 py-2.5 text-right font-medium">Qty</th>
                     <th className="px-3 py-2.5 text-right font-medium">Rate (₹)</th>
                     <th className="px-3 py-2.5 text-right font-medium">Amount (₹)</th>
+                    <th className="px-3 py-2.5 text-center font-medium">Rate</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -370,6 +371,13 @@ export default function HomePage() {
                           value={r.rate} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],rate:parseFloat(e.target.value)||0}; setEditedBoqRows(u); setBoqSaved(false); }} />
                       </td>
                       <td className="px-3 py-1.5 text-right font-medium text-green-800 text-xs">₹{(r.qty * r.rate).toLocaleString("en-IN")}</td>
+                      <td className="px-3 py-1.5 text-center">
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                          r.confidence === "high" ? "bg-green-100 text-green-800" :
+                          r.confidence === "medium" ? "bg-yellow-100 text-yellow-800" :
+                          "bg-red-100 text-red-700"
+                        }`}>{r.confidence ?? "—"}</span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

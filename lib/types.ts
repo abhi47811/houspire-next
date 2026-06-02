@@ -12,6 +12,7 @@ export interface BOQRow {
   unit: string;
   qty: number;
   rate: number;
+  confidence?: "high" | "medium" | "low";
 }
 
 export interface RateSource {
