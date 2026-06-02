@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const p = data.project as { client_name: string; city: string; pincode: string };
   const buf = generateVendorExcel(p.client_name, p.city, p.pincode, data.vendors, data.notes);
   const safe = p.client_name.replace(/[^A-Za-z0-9]/g, "_");
-  return new NextResponse(buf, {
+  return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${p.city}_${safe}_Vendors_${p.pincode}.xlsx"`,

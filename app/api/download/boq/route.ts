@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const p = data.project as { client_name: string; city: string; tier: string };
   const buf = generateBOQExcel(p.client_name, p.city, p.tier, data.boq_rows, data.rate_sources);
   const safe = p.client_name.replace(/[^A-Za-z0-9]/g, "_");
-  return new NextResponse(buf, {
+  return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${safe}_BOQ_${p.city}.xlsx"`,
