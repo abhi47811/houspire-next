@@ -20,6 +20,8 @@ export default function HomePage() {
   const [status, setStatus] = useState("");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [boqRows, setBoqRows] = useState<BOQRow[]>([]);
+  const [editedBoqRows, setEditedBoqRows] = useState<BOQRow[]>([]);
+  const [boqSaved, setBoqSaved] = useState(false);
   const [vendors, setVendors] = useState<VendorRow[]>([]);
 
   const [loading, setLoading] = useState(false);
@@ -65,6 +67,8 @@ export default function HomePage() {
       }
       const data = await res.json();
       setBoqRows(data.boq_rows ?? []);
+      setEditedBoqRows(data.boq_rows ?? []);
+      setBoqSaved(false);
       setVendors(data.vendors ?? []);
       setProjectId(data.project_id ?? null);
       setStatus(`✅ BOQ: ${data.boq_rows?.length ?? 0} line items | Vendors: ${data.vendors?.length ?? 0} entries`);
@@ -294,15 +298,42 @@ export default function HomePage() {
                 className="inline-flex items-center gap-2 bg-white text-green-900 px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-50" download>
                 📍 Vendor Excel ({vendors.length} vendors)
               </a>
+              <a href={`/api/download/boq-pdf?id=${projectId}`}
+                className="inline-flex items-center gap-2 bg-amber-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-amber-400" download>
+                📑 Branded BOQ PDF
+              </a>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(`Houspire BOQ for ${clientName} - ${city} | ${boqRows.length} items | Est. ₹${Math.round(boqRows.reduce((s, r) => s + r.qty * r.rate, 0)).toLocaleString("en-IN")} | View project: https://houspire-next.vercel.app/projects`)}`}
+                target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-green-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-400">
+                💬 Share on WhatsApp
+              </a>
             </div>
             <p className="text-xs text-green-300 mt-3">Saved to database. Access anytime at <a href="/projects" className="underline">Past Projects</a>.</p>
           </section>
         )}
 
-        {/* BOQ Preview */}
-        {boqRows.length > 0 && (
+        {/* BOQ Preview with inline edit */}
+        {editedBoqRows.length > 0 && (
           <section className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">BOQ Preview ({boqRows.length} line items)</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-gray-900">BOQ Preview ({editedBoqRows.length} line items) <span className="text-xs font-normal text-gray-400">— click cells to edit</span></h2>
+              <button
+                className="text-sm bg-green-900 text-white px-4 py-1.5 rounded-lg hover:bg-green-800 disabled:opacity-50"
+                disabled={boqSaved}
+                onClick={async () => {
+                  if (!projectId) return;
+                  await fetch(`/api/projects/${projectId}/boq`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ rows: editedBoqRows }),
+                  });
+                  setBoqSaved(true);
+                }}
+              >
+                {boqSaved ? "✓ Saved" : "💾 Save Edits"}
+              </button>
+            </div>
             <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="w-full text-sm">
                 <thead>
@@ -316,14 +347,29 @@ export default function HomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {boqRows.map((r, i) => (
+                  {editedBoqRows.map((r, i) => (
                     <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                      <td className="px-3 py-1.5 text-gray-500 text-xs">{r.category}</td>
-                      <td className="px-3 py-1.5">{r.description}</td>
-                      <td className="px-3 py-1.5 text-center text-gray-500">{r.unit}</td>
-                      <td className="px-3 py-1.5 text-right">{r.qty}</td>
-                      <td className="px-3 py-1.5 text-right">{r.rate.toLocaleString("en-IN")}</td>
-                      <td className="px-3 py-1.5 text-right font-medium text-green-800">₹{(r.qty * r.rate).toLocaleString("en-IN")}</td>
+                      <td className="px-1 py-0.5">
+                        <input className="w-full text-xs text-gray-500 border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-2 py-1"
+                          value={r.category} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],category:e.target.value}; setEditedBoqRows(u); setBoqSaved(false); }} />
+                      </td>
+                      <td className="px-1 py-0.5">
+                        <input className="w-full text-xs border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-2 py-1"
+                          value={r.description} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],description:e.target.value}; setEditedBoqRows(u); setBoqSaved(false); }} />
+                      </td>
+                      <td className="px-1 py-0.5">
+                        <input className="w-full text-xs text-center text-gray-500 border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
+                          value={r.unit} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],unit:e.target.value}; setEditedBoqRows(u); setBoqSaved(false); }} />
+                      </td>
+                      <td className="px-1 py-0.5">
+                        <input type="number" className="w-full text-xs text-right border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
+                          value={r.qty} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],qty:parseFloat(e.target.value)||0}; setEditedBoqRows(u); setBoqSaved(false); }} />
+                      </td>
+                      <td className="px-1 py-0.5">
+                        <input type="number" className="w-full text-xs text-right border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
+                          value={r.rate} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],rate:parseFloat(e.target.value)||0}; setEditedBoqRows(u); setBoqSaved(false); }} />
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-medium text-green-800 text-xs">₹{(r.qty * r.rate).toLocaleString("en-IN")}</td>
                     </tr>
                   ))}
                 </tbody>

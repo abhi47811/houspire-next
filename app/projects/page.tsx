@@ -7,9 +7,12 @@ export default async function ProjectsPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
-        <a href="/" className="text-green-700 hover:underline text-sm">← Back</a>
-        <h1 className="text-2xl font-bold text-green-900">📁 Past Projects</h1>
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <a href="/" className="text-green-700 hover:underline text-sm">← Back</a>
+          <h1 className="text-2xl font-bold text-green-900">📁 Past Projects</h1>
+        </div>
+        <a href="/projects/compare" className="text-sm bg-green-900 text-white px-4 py-2 rounded-lg hover:bg-green-800">⚖️ Compare Projects</a>
       </div>
 
       <div className="max-w-4xl mx-auto px-6 py-8">

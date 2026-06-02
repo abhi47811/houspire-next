@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/scrape-rates",
+      "schedule": "0 3 * * 1"
+    }
+  ]
+}
