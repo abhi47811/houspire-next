@@ -1,5 +1,29 @@
 import { getAnthropicClient } from "./anthropic";
+import { getSupabaseClient } from "./supabase";
 import type { BOQRow, RateSource, RoomAnalysis } from "./types";
+
+async function fetchRateLibrary(city: string): Promise<string> {
+  try {
+    const db = getSupabaseClient();
+    const [rates, mults] = await Promise.all([
+      db.from("rates").select("category,item,unit,rate_min,rate_max,brand,source_url").order("category"),
+      db.from("city_multipliers").select("city,multiplier").eq("city", city).single(),
+    ]);
+    const multiplier = (mults.data as { multiplier: number } | null)?.multiplier ?? 1.0;
+    if (!rates.data || rates.data.length === 0) return "";
+
+    const lines = (rates.data as Array<{ category: string; item: string; unit: string; rate_min: number; rate_max: number; brand?: string }>)
+      .map((r) => {
+        const rate = r.rate_min === r.rate_max ? `${Math.round(r.rate_min * multiplier)}` : `${Math.round(r.rate_min * multiplier)}-${Math.round(r.rate_max * multiplier)}`;
+        const brand = r.brand ? ` (${r.brand})` : "";
+        return `${r.item}${brand}: ${rate}/${r.unit}`;
+      })
+      .join("\n");
+    return `RATE LIBRARY — ${city} ×${multiplier} applied:\n${lines}`;
+  } catch {
+    return "";
+  }
+}
 
 const BOQ_SYSTEM_PROMPT = `You are the Houspire BOQ Generator. Produce client-deliverable Excel BOQs for Indian residential interior projects.
 
@@ -18,27 +42,7 @@ GRANULARITY — always produce sample-level detail:
 - CARPENTRY: Each piece separately — wardrobe, loft, desk, shelves, bedside, TV unit. Never bundle.
 - Brands required: Century BWR ply, Greenlam laminate, Kajaria/Somany tiles, Mikasa engineered wood, Legrand Arteor switches, Polycab/Havells cable, Atomberg fans, Asian Paints Royale Luxury Emulsion, Marshalls/Excel wallpaper, Hettich/Hafele hardware.
 
-RATE LIBRARY — Hyderabad baseline ×1.00. Apply city multiplier silently:
-Gypsum FC cove+paint: 165/sft | Coffered FC: 180/sft | Wood-veneer slat ceiling: 920/sft
-Fluted wall paneling (Century veneer+PU): 1400/sft | Bed-back panel: 1500-1700/sft
-Built-in TV unit: 1800-2000/sft | Wardrobe premium: 2200/sft | Wardrobe loft: 1750/sft
-Study desk+drawer+cabinet: 1334/sft | Open display shelves: 5980/nos
-Modular kitchen base: 2100/sft | wall: 1900/sft | Quartz countertop 20mm: 800/sft
-Premium vitrified (Kajaria/Somany): 179/sft | Engineered wood (Mikasa): 430/sft
-Wall emulsion Royale Luxury: 38/sft | Wallpaper supply+install: 140-152/sft
-Bath wall tile: 260/sft | Bath floor tile: 230/sft | TV-wall marble cladding: 550/sft
-COB downlights 5W trimless: 650/nos | LED cove strip high-CRI 14W/m: 110/rft
-BLDC fan with light kit (Atomberg/Anemos): 14000/nos | Bedside lamp: 4140/nos
-6A switch Legrand Arteor: 1150/nos | 16A socket: 1450/nos | Dedicated 16A AC+isolator: 1500/nos
-USB-C: 1900/nos | Ceiling fan drop+slab: 1200/nos | FR-LSH wiring lump: 4500-11000/lump
-Split AC 1.5T 5-star (Daikin/Mitsubishi): 51000/nos | Split AC 1.5T install kit: 11000/lump
-Split AC 2.0T: 62000/nos | Split AC 2.0T install kit: 12000/lump
-Hettich Sensys hinge: 350/pair | Hettich Quadro slide: 1400/pair
-Hafele Magic Corner: 14000/nos | Profile handle: 380-580/nos
-Curtains sheer+drape+track: 650-750/rft | Area rug premium: 7820/nos
-Wall-hung WC+Geberit cistern: 28000-36000/nos | Rain shower head+arm: 9500-12000/nos
-Basin mixer: 7500-10000/nos | Health faucet: 3500/nos | Backlit LED mirror anti-fog: 8000-9500/nos
-Concealed plumbing CPVC+labour: 18000-24000/lump
+{{RATE_LIBRARY}}
 
 OUTPUT FORMAT: Return ONLY valid JSON — no markdown, no explanation. Schema:
 {
@@ -79,10 +83,12 @@ export async function generateBOQ(
   tier: string,
 ): Promise<{ rows: BOQRow[]; sources: RateSource[] }> {
   const client = getAnthropicClient();
+  const rateLibrary = await fetchRateLibrary(city);
+  const systemPrompt = BOQ_SYSTEM_PROMPT.replace("{{RATE_LIBRARY}}", rateLibrary || "Use standard Indian interior rates for the given city and tier.");
   const resp = await client.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 4096,
-    system: BOQ_SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: [{ role: "user", content: buildUserPrompt(rooms, city, pincode, tier) }],
   });
 

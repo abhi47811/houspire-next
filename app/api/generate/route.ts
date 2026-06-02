@@ -25,12 +25,20 @@ export async function POST(req: NextRequest) {
     vendorResult.vendors, vendorResult.notes,
   );
 
+  // Run BOQ formula verification
+  const boqErrors = boqResult.rows.filter((r) => isNaN(r.qty) || r.qty <= 0 || isNaN(r.rate) || r.rate <= 0);
+
   return NextResponse.json({
     boq_rows: boqResult.rows,
     rate_sources: boqResult.sources,
     vendors: vendorResult.vendors,
     notes: vendorResult.notes,
     project_id: projectId,
+    verification: {
+      total_rows: boqResult.rows.length,
+      errors: boqErrors.length,
+      ok: boqErrors.length === 0,
+    },
   });
 }
 

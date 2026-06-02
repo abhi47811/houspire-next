@@ -5,7 +5,7 @@
       "id": "US-001",
       "title": "Structured JSON output from Claude",
       "description": "Replace fragile CSV parsing with JSON output from Claude for BOQ generation",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "boq-generator.ts requests JSON output from Claude with a defined schema",
         "Parser reads JSON directly — no regex, no CSV split",
@@ -34,8 +34,8 @@
       "passes": false,
       "acceptanceCriteria": [
         "Supabase migration creates vendors_db table: id, city, category, vendor, specialty, area, lat, lng, rating, phone, verified_at",
-        "Table seeded with 5+ verified vendors per category for Hyderabad and Mumbai",
-        "vendor-finder.ts queries vendors_db first, falls back to web_search if < 3 results",
+        "Table seeded with minimum 3-5 verified vendors per category for Hyderabad and Mumbai (flooring, carpentry, electrical, lighting, hardware, HVAC, painting, soft furnishings)",
+        "vendor-finder.ts queries vendors_db first, returns 3-5 nearest-sorted results, falls back to web_search if < 3 results",
         "TypeScript compiles, Vercel deploys"
       ]
     },

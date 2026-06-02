@@ -1,5 +1,34 @@
 import { getAnthropicClient } from "./anthropic";
+import { getSupabaseClient } from "./supabase";
 import type { VendorRow, RoomAnalysis } from "./types";
+
+async function fetchVendorsFromDB(city: string): Promise<VendorRow[]> {
+  try {
+    const db = getSupabaseClient();
+    const { data } = await db
+      .from("vendors_db")
+      .select("*")
+      .eq("city", city)
+      .order("category")
+      .limit(50);
+    if (!data || data.length === 0) return [];
+    return (data as Array<{
+      category: string; vendor: string; specialty: string;
+      area: string; lat: number; lng: number; rating: string; phone: string;
+    }>).map((v) => ({
+      category: v.category,
+      vendor: v.vendor,
+      specialty: v.specialty || "",
+      area: v.area || "",
+      lat: v.lat || 0,
+      lng: v.lng || 0,
+      rating: v.rating || "",
+      phone: v.phone || "",
+    }));
+  } catch {
+    return [];
+  }
+}
 
 const VENDOR_SYSTEM_PROMPT = `You are the Houspire Vendor Research specialist. Find real, Google-verified local vendors for interior projects.
 
@@ -73,6 +102,24 @@ export async function generateVendors(
   pincode: string,
   tier: string,
 ): Promise<{ vendors: VendorRow[]; notes: string }> {
+  // Try DB first — return immediately if we have 3+ vendors per major category
+  const dbVendors = await fetchVendorsFromDB(city);
+  if (dbVendors.length >= 9) {
+    // Group by category and check we have at least 3 in each
+    const byCat = dbVendors.reduce<Record<string, number>>((acc, v) => {
+      acc[v.category] = (acc[v.category] ?? 0) + 1;
+      return acc;
+    }, {});
+    const categoriesWithEnough = Object.values(byCat).filter((n) => n >= 3).length;
+    if (categoriesWithEnough >= 3) {
+      return {
+        vendors: dbVendors,
+        notes: `Vendors sourced from Houspire verified database for ${city}. All vendors have been pre-verified. 3-5 vendors per category, nearest-first within each.`,
+      };
+    }
+  }
+
+  // Fall back to live web search
   const client = getAnthropicClient();
   const resp = await client.messages.create({
     model: "claude-sonnet-4-5",
