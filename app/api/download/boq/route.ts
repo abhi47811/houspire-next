@@ -1,0 +1,21 @@
+import { NextRequest, NextResponse } from "next/server";
+import { loadProject } from "@/lib/db";
+import { generateBOQExcel } from "@/lib/excel-generator";
+
+export async function GET(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+  const data = await loadProject(id);
+  if (!data.project) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const p = data.project as { client_name: string; city: string; tier: string };
+  const buf = generateBOQExcel(p.client_name, p.city, p.tier, data.boq_rows, data.rate_sources);
+  const safe = p.client_name.replace(/[^A-Za-z0-9]/g, "_");
+  return new NextResponse(buf, {
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${safe}_BOQ_${p.city}.xlsx"`,
+    },
+  });
+}
