@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { analyzeRender } from "@/lib/room-analyzer";
+import { analyzeAllRenders } from "@/lib/room-analyzer";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const files = formData.getAll("images") as File[];
 
-  const results = await Promise.all(
+  const images = await Promise.all(
     files.map(async (file) => {
       const bytes = await file.arrayBuffer();
-      const base64 = Buffer.from(bytes).toString("base64");
-      const mediaType = file.type || "image/jpeg";
-      return analyzeRender(base64, mediaType, file.name);
+      return {
+        base64: Buffer.from(bytes).toString("base64"),
+        mediaType: file.type || "image/jpeg",
+        filename: file.name,
+      };
     }),
   );
 
+  const results = await analyzeAllRenders(images);
   return NextResponse.json(results);
 }
