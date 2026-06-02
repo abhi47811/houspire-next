@@ -27,16 +27,14 @@ const styles = StyleSheet.create({
   disclaimerText: { fontSize: 8, color: "#555", lineHeight: 1.5 },
 });
 
-function colWidths() {
-  return { cat: "15%", desc: "42%", unit: "8%", qty: "8%", rate: "12%", amount: "15%" };
-}
+const COL_WIDTHS = { cat: "15%", desc: "42%", unit: "8%", qty: "8%", rate: "12%", amount: "15%" };
 
 async function buildPDF(
   clientName: string, city: string, tier: string,
   rows: BOQRow[], sources: RateSource[],
 ): Promise<Buffer> {
   const total = rows.reduce((s, r) => s + r.qty * r.rate, 0);
-  const w = colWidths();
+  const w = COL_WIDTHS;
 
   const doc = (
     <Document>

@@ -100,9 +100,3 @@ async function analyzeSingle(
     return { room_type: "Unknown", estimated_sqft: 120, confidence: "low", design_elements: "Could not analyse — describe manually.", image_filename: img.filename };
   }
 }
-
-// Keep backward compat for single-image callers
-export async function analyzeRender(imageBase64: string, mediaType: string, filename: string): Promise<RoomAnalysis> {
-  const client = getAnthropicClient();
-  return analyzeSingle(client, { base64: imageBase64, mediaType, filename });
-}
