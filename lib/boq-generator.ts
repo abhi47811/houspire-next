@@ -6,7 +6,6 @@ const BOQ_SYSTEM_PROMPT = `You are the Houspire BOQ Generator. Produce client-de
 TEMPLATE RULES (non-negotiable):
 - Two tiers only: Mid-tier or Premium. Never economy/standard/luxury.
 - City multipliers are SILENT — bake into each line-item rate, never show as a row.
-- Amount = Quantity × Rate (the Excel formula handles it — do not compute).
 - Description must end with " - <Room Name>".
 - No footer rows — no subtotal, GST, contingency, grand total.
 - TV/electronics and kitchen appliances are client scope — exclude unless asked.
@@ -39,7 +38,17 @@ Hafele Magic Corner: 14000/nos | Profile handle: 380-580/nos
 Curtains sheer+drape+track: 650-750/rft | Area rug premium: 7820/nos
 Wall-hung WC+Geberit cistern: 28000-36000/nos | Rain shower head+arm: 9500-12000/nos
 Basin mixer: 7500-10000/nos | Health faucet: 3500/nos | Backlit LED mirror anti-fog: 8000-9500/nos
-Concealed plumbing CPVC+labour: 18000-24000/lump`;
+Concealed plumbing CPVC+labour: 18000-24000/lump
+
+OUTPUT FORMAT: Return ONLY valid JSON — no markdown, no explanation. Schema:
+{
+  "boq": [
+    { "category": string, "description": string, "unit": string, "qty": number, "rate": number }
+  ],
+  "sources": [
+    { "item": string, "basis": string, "source": string }
+  ]
+}`;
 
 function buildUserPrompt(rooms: RoomAnalysis[], city: string, pincode: string, tier: string) {
   const roomSummary = rooms
@@ -57,58 +66,10 @@ INSTRUCTIONS:
 2. Generate a line item for EVERY visible and implied element. Never bundle carpentry, electrical, AC.
 3. Brand names REQUIRED in every description.
 4. Description format: "[full spec + brand] - [Room Name]"
-5. Rate Sources: cite real brand website for every rate.
+5. Include rate_sources with real brand URLs (kajariaceramics.com, hettich.com, atomberg.com, asianpaints.com, daikinindia.com, legrand.co.in etc.)
+6. Notes in sources: "${city} multiplier applied silently" and "Room sizes estimated from renders — confirm before ordering"
 
-OUTPUT — exactly these two sections, comma-separated:
-
-=== BOQ TABLE ===
-Category,Description,Unit,Quantity,Rate,Amount
-[one line per item]
-
-=== RATE SOURCES ===
-Category / Item,Rate Basis (${city} ${tier} 2025-26),Source
-[real URL for every rate]
-Note,${city} multiplier applied silently to all base rates.,-
-Note,Room sizes estimated from renders — confirm before ordering.,-`;
-}
-
-function parseBOQResponse(text: string): { rows: BOQRow[]; sources: RateSource[] } {
-  const rows: BOQRow[] = [];
-  const sources: RateSource[] = [];
-
-  const boqMatch = text.match(/=== BOQ TABLE ===\n([\s\S]*?)(?:\n=== RATE SOURCES ===|$)/);
-  const srcMatch = text.match(/=== RATE SOURCES ===\n([\s\S]*)$/);
-
-  if (boqMatch) {
-    for (const line of boqMatch[1].trim().split("\n")) {
-      const parts = line.split(",").map((p) => p.trim());
-      if (parts.length < 5 || parts[0] === "Category") continue;
-      try {
-        const category = parts[0];
-        const unit = parts.length >= 6 ? parts[parts.length - 4] : parts[2];
-        const qty = parseFloat(parts[parts.length - 3]);
-        const rate = parseFloat(parts[parts.length - 2]);
-        const description =
-          parts.length > 5
-            ? parts.slice(1, parts.length - 4).join(",").trim()
-            : parts[1];
-        if (isNaN(qty) || isNaN(rate)) continue;
-        rows.push({ category, description, unit, qty, rate });
-      } catch {
-        continue;
-      }
-    }
-  }
-
-  if (srcMatch) {
-    for (const line of srcMatch[1].trim().split("\n")) {
-      const parts = line.split(",", 3).map((p) => p.trim());
-      if (parts.length < 2 || !parts[0]) continue;
-      sources.push({ item: parts[0], basis: parts[1] ?? "", source: parts[2] ?? "" });
-    }
-  }
-
-  return { rows, sources };
+Return valid JSON only.`;
 }
 
 export async function generateBOQ(
@@ -124,6 +85,41 @@ export async function generateBOQ(
     system: BOQ_SYSTEM_PROMPT,
     messages: [{ role: "user", content: buildUserPrompt(rooms, city, pincode, tier) }],
   });
-  const text = (resp.content[0] as { text: string }).text;
-  return parseBOQResponse(text);
+
+  const raw = (resp.content[0] as { text: string }).text.trim();
+
+  try {
+    // Strip markdown code fences if present
+    const json = raw.startsWith("```")
+      ? raw.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "")
+      : raw;
+    const parsed = JSON.parse(json) as {
+      boq: Array<{ category: string; description: string; unit: string; qty: number; rate: number }>;
+      sources: Array<{ item: string; basis: string; source: string }>;
+    };
+
+    const rows: BOQRow[] = (parsed.boq ?? [])
+      .filter((r) => r.category && r.description && !isNaN(r.qty) && !isNaN(r.rate))
+      .map((r) => ({
+        category: String(r.category),
+        description: String(r.description),
+        unit: String(r.unit || "nos"),
+        qty: Number(r.qty),
+        rate: Number(r.rate),
+      }));
+
+    const sources: RateSource[] = (parsed.sources ?? [])
+      .filter((s) => s.item)
+      .map((s) => ({
+        item: String(s.item),
+        basis: String(s.basis || ""),
+        source: String(s.source || ""),
+      }));
+
+    return { rows, sources };
+  } catch {
+    // JSON parse failed — return empty so UI can show error
+    console.error("BOQ JSON parse failed. Raw:", raw.slice(0, 300));
+    return { rows: [], sources: [] };
+  }
 }

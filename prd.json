@@ -1,0 +1,134 @@
+{
+  "project": "Houspire Budget Generator — 10 Improvements",
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Structured JSON output from Claude",
+      "description": "Replace fragile CSV parsing with JSON output from Claude for BOQ generation",
+      "passes": false,
+      "acceptanceCriteria": [
+        "boq-generator.ts requests JSON output from Claude with a defined schema",
+        "Parser reads JSON directly — no regex, no CSV split",
+        "BOQ rows correctly parsed with commas in descriptions handled natively",
+        "TypeScript compiles with no errors (npm run build)",
+        "git push succeeds and Vercel deploys successfully"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Rate library in Supabase DB",
+      "description": "Store rates in a Supabase rates table, pull dynamically into BOQ prompts",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Supabase migration creates rates table with columns: id, category, item, unit, rate_min, rate_max, city_baseline, brand, source_url, updated_at",
+        "rates table seeded with all rate library entries from current system prompt",
+        "boq-generator.ts fetches rates from DB before calling Claude",
+        "City multiplier applied from cities table or config",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "City vendor database",
+      "description": "Pre-seed verified vendors per city in Supabase instead of live web search every time",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Supabase migration creates vendors_db table: id, city, category, vendor, specialty, area, lat, lng, rating, phone, verified_at",
+        "Table seeded with 5+ verified vendors per category for Hyderabad and Mumbai",
+        "vendor-finder.ts queries vendors_db first, falls back to web_search if < 3 results",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "BOQ formula verifier",
+      "description": "Server route that verifies qty*rate arithmetic after generation",
+      "passes": false,
+      "acceptanceCriteria": [
+        "GET /api/verify/boq?id=<projectId> returns {errors: [], total_rows: N, ok: true/false}",
+        "Checks each boq_row: amount should equal qty * rate within 1% tolerance",
+        "Returns list of failing rows with expected vs actual",
+        "Integrated into generate route — runs automatically after BOQ save",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Multi-render accuracy improvement",
+      "description": "Improved Vision prompt with room context linking across multiple renders",
+      "passes": false,
+      "acceptanceCriteria": [
+        "room-analyzer.ts sends all renders in a single Claude call when multiple images provided",
+        "Prompt instructs Claude to cross-reference rooms (e.g. note if ceiling style consistent)",
+        "Returns array of RoomAnalysis objects in same order as input",
+        "Single-image case still works",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Rate source scraper",
+      "description": "Cron job to scrape brand websites weekly and update rates in DB",
+      "passes": false,
+      "acceptanceCriteria": [
+        "POST /api/cron/scrape-rates endpoint exists and is protected by CRON_SECRET",
+        "Scrapes at least 3 brand pages (e.g. atomberg.com fans, kajariaceramics.com tiles, hettich.com hardware)",
+        "Updates rates table with new rate_min/rate_max and updated_at",
+        "vercel.json configures weekly cron schedule",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Branded PDF with @react-pdf/renderer",
+      "description": "Generate client-deliverable branded PDF using @react-pdf/renderer (Vercel-compatible)",
+      "passes": false,
+      "acceptanceCriteria": [
+        "@react-pdf/renderer installed as dependency",
+        "GET /api/download/boq-pdf?id=<projectId> streams a PDF response",
+        "PDF contains: Houspire header (green #1B4D3E), client name, city, tier, full BOQ table, rate sources",
+        "File named Houspire_BOQ_{client}_{city}.pdf",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "BOQ inline edit",
+      "description": "Let staff edit BOQ line items in the UI before downloading",
+      "passes": false,
+      "acceptanceCriteria": [
+        "BOQ table rows are editable (click to edit category, description, unit, qty, rate)",
+        "Amount column recalculates in real-time as qty/rate change",
+        "Save button commits edited rows to Supabase boq_rows table",
+        "Download buttons reflect edited data",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Project comparison",
+      "description": "Compare two saved projects side by side",
+      "passes": false,
+      "acceptanceCriteria": [
+        "/projects/compare?a=<id>&b=<id> page exists",
+        "Page loads both projects from DB and renders side-by-side tables",
+        "Highlights rows present in one but not the other",
+        "Shows total cost comparison at top",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-010",
+      "title": "WhatsApp share",
+      "description": "One-click share BOQ summary to client via WhatsApp",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Share button appears on downloads section after generation",
+        "Clicking opens WhatsApp web/app with pre-filled message containing client name, city, item count, total estimated cost, and project link",
+        "Message format: 'Houspire BOQ for {client} - {city} | {N} items | Est. ₹{total} | View: {url}'",
+        "Works on mobile (opens WhatsApp app) and desktop (opens web.whatsapp.com)",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    }
+  ]
+}
