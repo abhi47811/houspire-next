@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const CATEGORIES = [
   "Carpentry / Ceiling", "Flooring / Walls", "Lighting",
@@ -18,17 +18,36 @@ interface VerifyResult {
 }
 
 export default function RatesAdminPage() {
+  const [accessGranted, setAccessGranted] = useState(false);
   const [category, setCategory] = useState("Flooring / Walls");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<VerifyResult[]>([]);
   const [log, setLog] = useState<string[]>([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setAccessGranted(params.get("key") === "houspire-admin-2026");
+  }, []);
+
+  if (!accessGranted) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-xl border border-red-200 p-8 text-center max-w-md">
+          <p className="text-red-600 font-semibold text-lg mb-2">Access Denied</p>
+          <p className="text-gray-500 text-sm">Add <code className="bg-gray-100 px-1 rounded">?key=houspire-admin-2026</code> to the URL.</p>
+        </div>
+      </main>
+    );
+  }
 
   async function runVerify() {
     setLoading(true);
     setResults([]);
     setLog([`Searching live prices for ${category}…`]);
 
-    const res = await fetch(`/api/admin/verify-rates?category=${encodeURIComponent(category)}`);
+    const res = await fetch(`/api/admin/verify-rates?category=${encodeURIComponent(category)}`, {
+      headers: { "x-admin-key": "houspire-admin-2026" },
+    });
     const data = await res.json() as { results: VerifyResult[] };
     setResults(data.results ?? []);
     const found = (data.results ?? []).filter((r) => r.found).length;

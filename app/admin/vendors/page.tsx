@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CITIES } from "@/lib/config";
 
 const CATEGORIES = [
@@ -16,6 +16,7 @@ interface SeedResult {
 }
 
 export default function VendorAdminPage() {
+  const [accessGranted, setAccessGranted] = useState(false);
   const [city, setCity] = useState("Hyderabad");
   const [pincode, setPincode] = useState("");
   const [category, setCategory] = useState("Flooring");
@@ -23,6 +24,22 @@ export default function VendorAdminPage() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SeedResult[]>([]);
   const [log, setLog] = useState<string[]>([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setAccessGranted(params.get("key") === "houspire-admin-2026");
+  }, []);
+
+  if (!accessGranted) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-xl border border-red-200 p-8 text-center max-w-md">
+          <p className="text-red-600 font-semibold text-lg mb-2">Access Denied</p>
+          <p className="text-gray-500 text-sm">Add <code className="bg-gray-100 px-1 rounded">?key=houspire-admin-2026</code> to the URL.</p>
+        </div>
+      </main>
+    );
+  }
 
   async function runSeed() {
     setLoading(true);
@@ -33,20 +50,19 @@ export default function VendorAdminPage() {
       setLog([`Searching Google Maps for ${category} vendors in ${city}…`]);
       const res = await fetch("/api/admin/seed-vendors", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-admin-key": "houspire-admin-2026" },
         body: JSON.stringify({ city, category, pincode: pincode || undefined }),
       });
       const data = await res.json() as SeedResult & { inserted?: number };
       setResults([{ category, inserted: data.inserted ?? 0, vendors: data.vendors, error: data.error }]);
       setLog([data.error ? `✗ ${data.error}` : `✓ ${data.inserted} real vendors saved for ${category} in ${city}`]);
     } else {
-      // All categories
       const allResults: SeedResult[] = [];
       for (const cat of CATEGORIES) {
         setLog((prev) => [...prev, `Searching ${cat} in ${city}…`]);
         const res = await fetch("/api/admin/seed-vendors", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-admin-key": "houspire-admin-2026" },
           body: JSON.stringify({ city, category: cat, pincode: pincode || undefined }),
         });
         const data = await res.json() as SeedResult & { inserted?: number };
@@ -122,14 +138,12 @@ export default function VendorAdminPage() {
           </button>
         </div>
 
-        {/* Log */}
         {log.length > 0 && (
           <div className="bg-gray-900 text-green-400 rounded-xl p-4 font-mono text-xs space-y-0.5">
             {log.map((l, i) => <div key={i}>{l}</div>)}
           </div>
         )}
 
-        {/* Results */}
         {results.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
             <div className="flex items-center justify-between">

@@ -52,7 +52,17 @@ Return ONLY this JSON array, no other text:
 ]
 `;
 
+function isAuthorized(req: NextRequest): boolean {
+  const headerKey = req.headers.get("x-admin-key");
+  const queryKey = req.nextUrl.searchParams.get("key");
+  return headerKey === "houspire-admin-2026" || queryKey === "houspire-admin-2026";
+}
+
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { city, category, pincode } = await req.json();
 
   if (!city || !category) {
@@ -132,6 +142,10 @@ export async function POST(req: NextRequest) {
 
 // GET: run for all categories in a city
 export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const city = req.nextUrl.searchParams.get("city");
   const pincode = req.nextUrl.searchParams.get("pincode") ?? undefined;
 

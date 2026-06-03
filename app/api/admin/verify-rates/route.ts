@@ -26,7 +26,17 @@ Return ONLY this JSON, no other text:
 }
 `;
 
+function isAuthorized(req: NextRequest): boolean {
+  const headerKey = req.headers.get("x-admin-key");
+  const queryKey = req.nextUrl.searchParams.get("key");
+  return headerKey === "houspire-admin-2026" || queryKey === "houspire-admin-2026";
+}
+
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { item_id } = await req.json();
   if (!item_id) return NextResponse.json({ error: "item_id required" }, { status: 400 });
 
@@ -83,6 +93,10 @@ export async function POST(req: NextRequest) {
 
 // GET: verify all rates for a category
 export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const category = req.nextUrl.searchParams.get("category");
   const db = getSupabaseClient();
   const client = getAnthropicClient();

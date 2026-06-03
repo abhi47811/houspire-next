@@ -1,4 +1,5 @@
 import { listProjects } from "@/lib/db";
+import { DeleteButton } from "./DeleteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,7 @@ export default async function ProjectsPage() {
                     className="text-sm bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-500">
                     💼 Contractor Quote
                   </a>
+                  <DeleteButton projectId={p.id} />
                 </div>
               </div>
             ))}
