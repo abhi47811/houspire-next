@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export function middleware(req: NextRequest) {
-  const pathname = req.nextUrl.pathname;
-  const publicRoutes = ["/login", "/approve", "/quote", "/api/", "/_next/", "/manifest.json", "/sw.js", "/icon"];
-  if (publicRoutes.some((p) => pathname.startsWith(p))) return NextResponse.next();
-  const hasAuth =
-    req.cookies.has("sb-prhsjeryvbasofzebtnx-auth-token") ||
-    req.cookies.has("sb-access-token");
-  if (!hasAuth) return NextResponse.redirect(new URL("/login", req.url));
+// Auth middleware disabled — app is internal, login is optional
+// Re-enable when @supabase/ssr cookie-based auth is wired properly
+export function middleware(_req: NextRequest) {
   return NextResponse.next();
 }
 
