@@ -191,7 +191,15 @@ export async function generateBOQ(
     fetchUnavailableBrands(city),
     fetchRateLookup(city),
   ]);
-  const rateSection = (rateLibrary || "Use standard Indian interior rates for the given city and tier.") + brandWarnings;
+  const fallbackRates = `RATE LIBRARY — Hyderabad baseline:
+Gypsum FC cove+paint: 165/sft | Wardrobe premium: 2200/sft | Wardrobe loft: 1750/sft
+Premium vitrified Kajaria/Somany: 179/sft | Engineered wood Mikasa: 430/sft
+Wall emulsion Royale Luxury: 38/sft | COB downlights 5W: 650/nos
+LED cove strip 14W/m: 110/rft | BLDC fan Atomberg: 14000/nos
+6A switch Legrand Arteor: 1150/nos | 16A socket: 1450/nos
+Split AC 1.5T Daikin: 51000/nos | Split AC install kit: 11000/lump
+Hettich Sensys hinge: 350/pair | Hettich Quadro slide: 1400/pair`;
+  const rateSection = (rateLibrary || fallbackRates) + brandWarnings;
   const systemPrompt = BOQ_SYSTEM_PROMPT.replace("{{RATE_LIBRARY}}", rateSection);
   const resp = await client.messages.create({
     model: "claude-sonnet-4-5",
@@ -203,10 +211,16 @@ export async function generateBOQ(
   const raw = (resp.content[0] as { text: string }).text.trim();
 
   try {
-    // Strip markdown code fences if present
-    const json = raw.startsWith("```")
-      ? raw.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "")
-      : raw;
+    // Robust JSON extraction — handle code fences, preamble text, trailing text
+    let json = raw;
+    if (json.startsWith("```")) {
+      json = json.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "").trim();
+    }
+    if (!json.startsWith("{")) {
+      const start = json.indexOf("{");
+      const end = json.lastIndexOf("}");
+      if (start !== -1 && end !== -1) json = json.slice(start, end + 1);
+    }
     const parsed = JSON.parse(json) as {
       boq: Array<{ category: string; description: string; unit: string; qty: number; rate: number; phase?: string }>;
       sources: Array<{ item: string; basis: string; source: string }>;
@@ -232,6 +246,9 @@ export async function generateBOQ(
         source: String(s.source || ""),
       }));
 
+    if (rows.length === 0) {
+      console.error("BOQ parse returned 0 rows. Raw (first 500):", raw.slice(0, 500));
+    }
     return { rows, sources };
   } catch {
     // JSON parse failed — return empty so UI can show error

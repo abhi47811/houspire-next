@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 import type { BOQRow, RateSource, VendorRow } from "./types";
 
 const BOQ_COL_WIDTHS = [16, 26, 11, 11, 11, 16];
-const VENDOR_COL_WIDTHS = [20, 22, 27, 18, 11, 8, 10];
+const VENDOR_COL_WIDTHS = [18, 28, 35, 25, 12, 12, 20, 35];
 
 export function generateBOQExcel(
   clientName: string,
@@ -13,7 +13,7 @@ export function generateBOQExcel(
 ): Buffer {
   const wb = XLSX.utils.book_new();
 
-  // BOQ sheet
+  // BOQ sheet only — no Rate Sources sheet
   const boqData = [
     ["Category", "Description", "Unit", "Quantity", "Rate", "Amount (Auto-calculated)"],
     ...rows.map((r, i) => [r.category, r.description, r.unit, r.qty, r.rate, { f: `D${i + 2}*E${i + 2}` }]),
@@ -21,15 +21,6 @@ export function generateBOQExcel(
   const ws1 = XLSX.utils.aoa_to_sheet(boqData);
   ws1["!cols"] = BOQ_COL_WIDTHS.map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws1, "BOQ Template");
-
-  // Rate Sources sheet
-  const srcData = [
-    ["Category / Item", "Rate Basis", "Source"],
-    ...sources.map((s) => [s.item, s.basis, s.source]),
-  ];
-  const ws2 = XLSX.utils.aoa_to_sheet(srcData);
-  ws2["!cols"] = [{ wch: 35 }, { wch: 45 }, { wch: 45 }];
-  XLSX.utils.book_append_sheet(wb, ws2, "Rate Sources");
 
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }
@@ -52,17 +43,41 @@ export function generateVendorExcel(
   const lat0 = vendors.find((v) => v.lat)?.lat ?? 0;
   const lng0 = vendors.find((v) => v.lng)?.lng ?? 0;
 
+  const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+  const headers = [
+    "Category",
+    "Vendor Name",
+    "Specialty / Brands",
+    "Area / Locality",
+    "Distance (km)",
+    "Google Rating",
+    "Contact",
+    "Verification Status",
+  ];
+
+  // Title rows + blank + headers + data
   const vendorData = [
-    ["Category", "Vendor", "Specialty / Brands", "Area", `Approx. km from ${pincode}`, "Rating (count)", "Phone"],
+    ["HOUSPIRE — Verified Local Vendor Directory"],
+    [`City: ${city} | Pincode: ${pincode} | Generated: ${today}`],
+    [""],
+    headers,
     ...vendors.map((v) => [
-      v.category, v.vendor, v.specialty, v.area,
+      v.category,
+      v.vendor,
+      v.specialty,
+      v.area,
       v.lat && v.lng ? km(v.lat, v.lng, lat0, lng0) : "",
-      v.rating, v.phone,
+      v.rating,
+      v.phone,
+      "⚠ Verify contact on Google Maps before use",
     ]),
   ];
+
   const ws = XLSX.utils.aoa_to_sheet(vendorData);
   ws["!cols"] = VENDOR_COL_WIDTHS.map((w) => ({ wch: w }));
-  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  // Freeze at row 5 (after 3 title rows + 1 header row)
+  ws["!freeze"] = { xSplit: 0, ySplit: 4 };
   XLSX.utils.book_append_sheet(wb, ws, "Vendors");
 
   const notesData = notes.split("\n").map((line) => [line]);
