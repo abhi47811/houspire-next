@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadProject } from "@/lib/db";
 import { renderToBuffer, Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
-import type { BOQRow, RateSource } from "@/lib/types";
+import type { BOQRow } from "@/lib/types";
 
 const BRAND_GREEN = "#1B4D3E";
 const BRAND_GOLD = "#D4AF37";
@@ -31,7 +31,7 @@ const COL_WIDTHS = { cat: "15%", desc: "42%", unit: "8%", qty: "8%", rate: "12%"
 
 async function buildPDF(
   clientName: string, city: string, tier: string,
-  rows: BOQRow[], sources: RateSource[],
+  rows: BOQRow[],
 ): Promise<Buffer> {
   const total = rows.reduce((s, r) => s + r.qty * r.rate, 0);
   const w = COL_WIDTHS;
@@ -82,18 +82,7 @@ async function buildPDF(
           </Text>
         </View>
 
-        {sources.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Rate Sources</Text>
-            {sources.map((s, i) => (
-              <View key={i} style={{ flexDirection: "row", padding: 3, backgroundColor: i % 2 === 0 ? "#FFF" : "#F7F5F0" }}>
-                <Text style={[styles.cell, { width: "30%" }]}>{s.item}</Text>
-                <Text style={[styles.cell, { width: "35%", color: "#555" }]}>{s.basis}</Text>
-                <Text style={[styles.cell, { width: "35%", color: "#0066CC" }]}>{s.source}</Text>
-              </View>
-            ))}
-          </>
-        )}
+{/* Rate sources removed — internal use only */}
 
         <View style={styles.disclaimer}>
           <Text style={styles.disclaimerText}>
@@ -124,7 +113,7 @@ export async function GET(req: NextRequest) {
   const p = data.project as { client_name: string; city: string; tier: string };
   const safe = p.client_name.replace(/[^A-Za-z0-9]/g, "_");
 
-  const buf = await buildPDF(p.client_name, p.city, p.tier, data.boq_rows, data.rate_sources);
+  const buf = await buildPDF(p.client_name, p.city, p.tier, data.boq_rows);
   return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/pdf",
