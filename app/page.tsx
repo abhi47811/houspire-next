@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { CITIES, CITIES_WITH_MULTIPLIERS, TIERS, ROOM_TYPES } from "@/lib/config";
+import { toast } from "@/lib/toast";
 import type { RoomAnalysis, BOQRow, BOQPhase, VendorRow } from "@/lib/types";
 
 const ALL_PHASES = "All Phases";
@@ -97,7 +98,19 @@ export default function HomePage() {
     const form = new FormData();
     files.forEach((f) => form.append("images", f));
     if (floorPlan) form.append("floorplan", floorPlan);
-    const res = await fetch("/api/analyse", { method: "POST", body: form });
+    let res: Response;
+    try {
+      res = await fetch("/api/analyse", { method: "POST", body: form });
+    } catch {
+      toast("Analysis failed — check API key", "error");
+      setAnalysing(false);
+      return;
+    }
+    if (!res.ok) {
+      toast("Analysis failed — check API key", "error");
+      setAnalysing(false);
+      return;
+    }
     const data: { rooms: RoomAnalysis[]; floorPlanRooms: Array<{room_type: string; estimated_sqft: number; length_ft?: number; width_ft?: number}> } = await res.json();
     setAnalyses(data.rooms);
     setEditedAnalyses(data.rooms);
@@ -123,6 +136,7 @@ export default function HomePage() {
       }
     }
     setStatus(`Detected ${data.rooms.length} room(s) — review and edit below`);
+    toast(`Detected ${data.rooms.length} room(s)`, "success");
     setAnalysing(false);
   }
 
@@ -144,6 +158,7 @@ export default function HomePage() {
       if (!res.ok) {
         const err = await res.text();
         setStatus(`Error: ${err}`);
+        toast(`Generation failed: ${err}`, "error");
         setLoading(false);
         return;
       }
@@ -162,8 +177,10 @@ export default function HomePage() {
       setEmailRecipient("");
       setShortlistedVendors(new Set());
       setStatus(`✅ BOQ: ${data.boq_rows?.length ?? 0} line items | Vendors: ${data.vendors?.length ?? 0} entries`);
+      toast(`✅ BOQ: ${data.boq_rows?.length} items generated`, "success");
     } catch (e) {
       setStatus(`Error: ${e}`);
+      toast(`Generation failed: ${e}`, "error");
     }
     setLoading(false);
   }
@@ -458,9 +475,14 @@ export default function HomePage() {
               {loading ? "⏳ Generating (parallel)…" : "⚡ Generate BOQ + Vendors"}
             </button>
             {status && (
-              <p className={`mt-3 text-sm font-medium ${status.startsWith("Error") ? "text-red-600" : "text-green-700"}`}>
-                {status}
-              </p>
+              <div className={`mt-3 flex items-start gap-2 rounded-lg p-3 text-sm font-medium ${
+                status.startsWith("Error") || status.startsWith("✗")
+                  ? "bg-red-50 text-red-700 border border-red-200"
+                  : "bg-green-50 text-green-700 border border-green-200"
+              }`}>
+                <span className="flex-1">{status}</span>
+                <button onClick={() => setStatus("")} className="text-current opacity-60 hover:opacity-100 ml-2 text-xs">✕</button>
+              </div>
             )}
           </section>
         )}
@@ -555,13 +577,18 @@ export default function HomePage() {
                   disabled={!emailRecipient || emailSending || emailSent}
                   onClick={async () => {
                     setEmailSending(true);
-                    await fetch("/api/send-boq", {
+                    const emailRes = await fetch("/api/send-boq", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ projectId, recipientEmail: emailRecipient }),
                     });
                     setEmailSending(false);
-                    setEmailSent(true);
+                    if (emailRes.ok) {
+                      setEmailSent(true);
+                      toast("Email sent!", "success");
+                    } else {
+                      toast("Email failed — check RESEND_API_KEY", "error");
+                    }
                   }}
                 >
                   {emailSending ? "Sending…" : emailSent ? "✓ Sent" : "📧 Send"}
@@ -895,6 +922,7 @@ export default function HomePage() {
                                   }
                                 } else {
                                   setShortlistedVendors((prev) => new Set([...prev, v.vendor]));
+                                  toast("Vendor pinned to shortlist", "success");
                                   if (projectId) {
                                     await fetch(`/api/projects/${projectId}/shortlist`, {
                                       method: "POST",

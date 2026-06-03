@@ -177,6 +177,17 @@ PROJECT: City: ${city} | Pincode: ${pincode} | Tier: ${tier}
 ROOMS:
 ${roomSummary}
 
+QUANTITY CALCULATION RULES (use actual room sqft to calculate quantities):
+- Flooring qty = room sqft (e.g., 180 sft room → 180 sft flooring)
+- False ceiling qty = 75% of room sqft (account for perimeter exclusion)
+- Cove LED strip qty = room perimeter in rft: for a 180 sft room ≈ 56 rft perimeter (√(180)×4 × 0.85)
+- Wall paint qty = wall area = perimeter × 9ft height: for 180 sft room ≈ 504 sft walls
+- AC: 1 unit per room. 1.5T for rooms < 200 sft, 2.0T for rooms ≥ 200 sft
+- Fan qty = 1 per room (except bathrooms)
+- COB downlights: 1 per 30-40 sft of floor area
+- Electrical switch points: 1 panel per 4 linear feet of wall (round up)
+- Wardrobe/storage: use visible design elements — do not invent if not shown
+
 INSTRUCTIONS:
 1. Apply the ${city} city multiplier silently to all rates.
 2. Generate a line item for EVERY visible and implied element. Never bundle carpentry, electrical, AC.
@@ -279,13 +290,9 @@ Waterproofing crystalline+polymer: 95/sft | Waterproof FC: 145/sft`;
         source: String(s.source || ""),
       }));
 
-    if (rows.length === 0) {
-      console.error("BOQ parse returned 0 rows. Raw (first 500):", raw.slice(0, 500));
-    }
     return { rows, sources };
   } catch {
     // JSON parse failed — return empty so UI can show error
-    console.error("BOQ JSON parse failed. Raw:", raw.slice(0, 300));
     return { rows: [], sources: [] };
   }
 }
