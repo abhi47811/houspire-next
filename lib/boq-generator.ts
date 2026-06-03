@@ -159,7 +159,7 @@ PHASE ASSIGNMENT RULES:
 
 function buildUserPrompt(rooms: RoomAnalysis[], city: string, pincode: string, tier: string) {
   const roomSummary = rooms
-    .map((r) => `- ${r.room_type} (~${r.estimated_sqft} sft): ${r.design_elements}`)
+    .map((r) => `- ${r.room_type} (~${r.estimated_sqft} sft)${r.style ? ` [${r.style} style]` : ""}: ${r.design_elements}`)
     .join("\n");
   return `Generate a DETAILED, sample-level BOQ. Every line item = vendor site-quote granularity.
 

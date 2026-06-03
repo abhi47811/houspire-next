@@ -4,6 +4,7 @@ export interface RoomAnalysis {
   confidence: "high" | "medium" | "low";
   design_elements: string;
   image_filename: string;
+  style?: "modern" | "contemporary" | "traditional" | "industrial" | "minimalist" | "eclectic";
 }
 
 export type BOQPhase =

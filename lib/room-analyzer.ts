@@ -10,15 +10,17 @@ For each room return:
 - estimated_sqft: integer estimate of floor area in sqft (bedroom 120-200, living 200-400, kitchen 80-150, bathroom 40-80)
 - confidence: "high" | "medium" | "low"
 - design_elements: one detailed sentence listing EVERY visible element — floor material, ceiling treatment, every carpentry item (wardrobe/TV unit/headboard/desk/shelves), wall treatment, every light fixture, AC, fans, furniture, soft furnishings, decor. Include material specs and brands where visible.
+- style: one of ["modern","contemporary","traditional","industrial","minimalist","eclectic"]
 
 Return ONLY a JSON array — one object per image in the same order. No markdown, no explanation.
-Example: [{"room_type":"Living Room","estimated_sqft":280,"confidence":"high","design_elements":"..."},...]`;
+Example: [{"room_type":"Living Room","estimated_sqft":280,"confidence":"high","design_elements":"...","style":"modern"},...]`;
 
 const VISION_PROMPT_SINGLE = `Analyse this interior design render carefully. Return a JSON object with:
 - room_type: one of [Living Room, Master Bedroom, Bedroom, Kitchen, Bathroom, Study / Home Office, Dining Room, Foyer / Entrance, Balcony, Unknown]
 - estimated_sqft: integer estimate of floor area in sqft
 - confidence: "high" | "medium" | "low"
 - design_elements: one detailed sentence listing EVERY visible element — floor, ceiling, carpentry, lights, AC, fans, furniture, decor with material specs and brands where visible.
+- style: one of ["modern","contemporary","traditional","industrial","minimalist","eclectic"]
 Return ONLY valid JSON, no other text.`;
 
 export async function analyzeAllRenders(
@@ -52,7 +54,7 @@ export async function analyzeAllRenders(
     if (text.startsWith("```")) text = text.split("```")[1].replace(/^json/, "").trim();
 
     const parsed = JSON.parse(text) as Array<{
-      room_type: string; estimated_sqft: number; confidence: string; design_elements: string;
+      room_type: string; estimated_sqft: number; confidence: string; design_elements: string; style?: string;
     }>;
 
     return parsed.map((d, i) => ({
@@ -61,6 +63,7 @@ export async function analyzeAllRenders(
       confidence: (d.confidence as "high" | "medium" | "low") ?? "medium",
       design_elements: d.design_elements ?? "",
       image_filename: images[i]?.filename ?? `image_${i + 1}`,
+      style: (d.style as RoomAnalysis["style"]) ?? undefined,
     }));
   } catch {
     // Fallback: analyse each individually
@@ -95,6 +98,7 @@ async function analyzeSingle(
       confidence: data.confidence ?? "medium",
       design_elements: data.design_elements ?? "",
       image_filename: img.filename,
+      style: (data.style as RoomAnalysis["style"]) ?? undefined,
     };
   } catch {
     return { room_type: "Unknown", estimated_sqft: 120, confidence: "low", design_elements: "Could not analyse — describe manually.", image_filename: img.filename };

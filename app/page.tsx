@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { CITIES, CITIES_WITH_MULTIPLIERS, TIERS, ROOM_TYPES } from "@/lib/config";
 import type { RoomAnalysis, BOQRow, BOQPhase, VendorRow } from "@/lib/types";
 
@@ -36,6 +36,23 @@ export default function HomePage() {
 
   // Phase filter for BOQ table
   const [selectedPhase, setSelectedPhase] = useState<string>(ALL_PHASES);
+
+  // US-T2-08: gap warnings
+  const [gapWarnings, setGapWarnings] = useState<string[]>([]);
+  // US-T2-09: dismissed optimization suggestions
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
+  const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<number>>(new Set());
+  // US-T2-11: actual cost tracking
+  const [actualCost, setActualCost] = useState<string>("");
+  const [savedActualCost, setSavedActualCost] = useState<number | null>(null);
+
+  // US-T3-12: email delivery
+  const [emailRecipient, setEmailRecipient] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+
+  // US-T3-14: vendor shortlist
+  const [shortlistedVendors, setShortlistedVendors] = useState<Set<string>>(new Set());
 
   const [loading, setLoading] = useState(false);
   const [analysing, setAnalysing] = useState(false);
@@ -86,11 +103,41 @@ export default function HomePage() {
       setBoqSaved(false);
       setVendors(data.vendors ?? []);
       setProjectId(data.project_id ?? null);
+      setGapWarnings(detectGaps(editedAnalyses, data.boq_rows ?? []));
+      setDismissedSuggestions(new Set());
+      setAcceptedSuggestions(new Set());
+      setSavedActualCost(null);
+      setActualCost("");
+      setEmailSent(false);
+      setEmailRecipient("");
+      setShortlistedVendors(new Set());
       setStatus(`✅ BOQ: ${data.boq_rows?.length ?? 0} line items | Vendors: ${data.vendors?.length ?? 0} entries`);
     } catch (e) {
       setStatus(`Error: ${e}`);
     }
     setLoading(false);
+  }
+
+  // US-T2-08: gap detection
+  function detectGaps(rooms: RoomAnalysis[], rows: BOQRow[]): string[] {
+    const warnings: string[] = [];
+    const desc = rows.map(r => r.description.toLowerCase()).join(' ');
+    for (const room of rooms) {
+      const rt = room.room_type.toLowerCase();
+      if ((rt.includes('bedroom') || rt.includes('living')) && !desc.includes('ceiling') && !desc.includes('cove')) {
+        warnings.push(`${room.room_type}: No false ceiling detected — consider adding`);
+      }
+      if ((rt.includes('bedroom') || rt.includes('living')) && !desc.includes(' ac ') && !desc.includes('split ac')) {
+        warnings.push(`${room.room_type}: No AC detected`);
+      }
+      if (rt.includes('kitchen') && !desc.includes('countertop') && !desc.includes('quartz')) {
+        warnings.push(`Kitchen: No countertop specified`);
+      }
+      if (rt.includes('bath') && !desc.includes('waterproof')) {
+        warnings.push(`Bathroom: No waterproofing specified`);
+      }
+    }
+    return warnings;
   }
 
   function updateAnalysis(idx: number, field: keyof RoomAnalysis, value: string | number) {
@@ -135,9 +182,24 @@ export default function HomePage() {
           <h1 className="text-xl font-bold tracking-wide">HOUSPIRE</h1>
           <p className="text-xs text-green-300">Budget Generator — Internal Tool</p>
         </div>
-        <a href="/projects" className="text-sm bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg font-medium transition-colors">
-          📁 Past Projects
-        </a>
+        <div className="flex gap-2">
+          <a href="/analytics" className="text-sm bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg font-medium transition-colors">
+            📊 Analytics
+          </a>
+          <a href="/projects" className="text-sm bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg font-medium transition-colors">
+            📁 Past Projects
+          </a>
+          <button
+            className="text-sm bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg font-medium transition-colors"
+            onClick={async () => {
+              const { getSupabaseClient } = await import("@/lib/supabase");
+              await getSupabaseClient().auth.signOut();
+              window.location.href = "/login";
+            }}
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
 
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
@@ -266,6 +328,9 @@ export default function HomePage() {
                   <div key={i} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${confColor}`}>{a.confidence}</span>
+                      {a.style && (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-800 capitalize">{a.style}</span>
+                      )}
                       <span className="text-sm font-medium text-gray-600">{a.image_filename}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -384,7 +449,72 @@ export default function HomePage() {
               >
                 🔗 Share Approval Link
               </button>
+              {/* US-T4-18: Contractor quote link */}
+              <button
+                className="inline-flex items-center gap-2 bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-600"
+                onClick={() => {
+                  const link = `${window.location.origin}/quote/${projectId}`;
+                  navigator.clipboard.writeText(link);
+                  alert(`Contractor quote link copied!\n${link}`);
+                }}
+              >
+                🏗️ Share Contractor Quote Link
+              </button>
             </div>
+            {/* Work order per phase */}
+            <div className="mt-4 border-t border-green-700 pt-4">
+              <p className="text-xs text-green-300 mb-2 font-medium">Work Orders by Phase</p>
+              <div className="flex flex-wrap gap-2">
+                {PHASES.map((p) => (
+                  <a
+                    key={p}
+                    href={`/api/download/work-order?id=${projectId}&phase=${encodeURIComponent(p)}`}
+                    className="inline-flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium"
+                    download
+                  >
+                    📋 {p.replace(/Phase \d: /, "")}
+                  </a>
+                ))}
+                <a
+                  href={`/api/download/work-order?id=${projectId}&phase=all`}
+                  className="inline-flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium"
+                  download
+                >
+                  📋 All Phases
+                </a>
+              </div>
+            </div>
+
+            {/* US-T3-12: Email delivery */}
+            <div className="mt-4 border-t border-green-700 pt-4">
+              <p className="text-xs text-green-300 mb-2 font-medium">Email BOQ to Client</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="email"
+                  className="border border-green-600 bg-green-800 text-white placeholder-green-400 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 w-56"
+                  placeholder="client@email.com"
+                  value={emailRecipient}
+                  onChange={(e) => { setEmailRecipient(e.target.value); setEmailSent(false); }}
+                />
+                <button
+                  className="bg-amber-500 hover:bg-amber-400 text-white px-4 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
+                  disabled={!emailRecipient || emailSending || emailSent}
+                  onClick={async () => {
+                    setEmailSending(true);
+                    await fetch("/api/send-boq", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ projectId, recipientEmail: emailRecipient }),
+                    });
+                    setEmailSending(false);
+                    setEmailSent(true);
+                  }}
+                >
+                  {emailSending ? "Sending…" : emailSent ? "✓ Sent" : "📧 Send"}
+                </button>
+              </div>
+            </div>
+
             <p className="text-xs text-green-300 mt-3">Saved to database. Access anytime at <a href="/projects" className="underline">Past Projects</a>.</p>
           </section>
         )}
@@ -432,6 +562,115 @@ export default function HomePage() {
                   ))}
                 </tbody>
               </table>
+            </section>
+          );
+        })()}
+
+        {/* US-T2-11: Actual cost tracking */}
+        {projectId && editedBoqRows.length > 0 && (() => {
+          const estimated = editedBoqRows.reduce((s, r) => s + r.qty * r.rate, 0);
+          const variance = savedActualCost !== null ? savedActualCost - estimated : null;
+          return (
+            <section className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-4">Enter Actual Final Cost</h2>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">₹</span>
+                  <input
+                    type="number"
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-green-600"
+                    placeholder="e.g. 1200000"
+                    value={actualCost}
+                    onChange={(e) => setActualCost(e.target.value)}
+                  />
+                </div>
+                <button
+                  className="bg-green-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-800 disabled:opacity-50"
+                  disabled={!actualCost}
+                  onClick={async () => {
+                    const val = parseFloat(actualCost);
+                    if (isNaN(val)) return;
+                    await fetch(`/api/projects/${projectId}/actual`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ actual_total_inr: val }),
+                    });
+                    setSavedActualCost(val);
+                  }}
+                >
+                  Save Actual Cost
+                </button>
+                {variance !== null && (
+                  <span className={`text-sm font-semibold ${variance <= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                    {variance <= 0
+                      ? `₹${Math.abs(Math.round(variance)).toLocaleString('en-IN')} under budget`
+                      : `₹${Math.round(variance).toLocaleString('en-IN')} over budget (${((variance / estimated) * 100).toFixed(1)}%)`}
+                  </span>
+                )}
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* US-T2-08: Gap warnings */}
+        {gapWarnings.length > 0 && (
+          <section className="space-y-2">
+            {gapWarnings.map((w, i) => (
+              <div key={i} className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                <span className="text-amber-500 mt-0.5">⚠️</span>
+                <p className="text-sm text-amber-800">{w}</p>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {/* US-T2-09: Savings opportunities */}
+        {editedBoqRows.length > 0 && (() => {
+          const desc = editedBoqRows.map(r => r.description.toLowerCase()).join(' ');
+          const suggestions: { id: number; trigger: string; suggestion: string; saving: number; unit: string }[] = [];
+          if (desc.includes('kajaria')) {
+            suggestions.push({ id: 0, trigger: 'kajaria', suggestion: 'Morbi tiles instead of Kajaria: saves ~₹30/sft', saving: 30, unit: 'sft' });
+          }
+          if (desc.includes('legrand')) {
+            suggestions.push({ id: 1, trigger: 'legrand', suggestion: 'Anchor/Panasonic instead of Legrand: saves ~₹400/nos', saving: 400, unit: 'nos' });
+          }
+          if (desc.includes('hettich') && desc.includes('hinge')) {
+            suggestions.push({ id: 2, trigger: 'hettich hinge', suggestion: 'Dorset/local hinges instead of Hettich: saves ~₹100/pair', saving: 100, unit: 'pair' });
+          }
+          const visible = suggestions.filter(s => !dismissedSuggestions.has(s.id));
+          if (visible.length === 0) return null;
+          return (
+            <section className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-4">💡 Savings Opportunities</h2>
+              <div className="space-y-3">
+                {visible.map((s) => {
+                  const matchedRows = editedBoqRows.filter(r => r.description.toLowerCase().includes(s.trigger.split(' ')[0]));
+                  const totalQty = matchedRows.reduce((sum, r) => sum + r.qty, 0);
+                  const totalSaving = Math.round(totalQty * s.saving);
+                  const accepted = acceptedSuggestions.has(s.id);
+                  return (
+                    <div key={s.id} className={`flex items-center justify-between gap-4 rounded-lg border px-4 py-3 ${accepted ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-800">{s.suggestion}</p>
+                        {totalQty > 0 && <p className="text-xs text-green-700 mt-0.5">Est. total saving: ₹{totalSaving.toLocaleString('en-IN')} ({Math.round(totalQty)} {s.unit})</p>}
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        {!accepted && (
+                          <button
+                            className="text-xs bg-green-700 text-white px-3 py-1.5 rounded-lg hover:bg-green-600"
+                            onClick={() => setAcceptedSuggestions(prev => new Set([...prev, s.id]))}
+                          >Accept</button>
+                        )}
+                        {accepted && <span className="text-xs text-green-700 font-medium">✓ Noted</span>}
+                        <button
+                          className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-200"
+                          onClick={() => setDismissedSuggestions(prev => new Set([...prev, s.id]))}
+                        >Dismiss</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           );
         })()}
@@ -507,6 +746,7 @@ export default function HomePage() {
                     <th className="px-3 py-2.5 text-right font-medium">Rate (₹)</th>
                     <th className="px-3 py-2.5 text-right font-medium">Amount (₹)</th>
                     <th className="px-3 py-2.5 text-center font-medium">Rate</th>
+                    <th className="px-3 py-2.5 text-center font-medium">Alt</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -532,7 +772,7 @@ export default function HomePage() {
                             <td className="px-3 py-2 text-xs font-semibold text-green-800 text-right">
                               ₹{Math.round(sub).toLocaleString("en-IN")}
                             </td>
-                            <td />
+                            <td /><td />
                           </tr>
                         );
                       }
@@ -551,11 +791,17 @@ export default function HomePage() {
         {/* Vendor Preview */}
         {vendors.length > 0 && (
           <section className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Local Vendors ({vendors.length})</h2>
+            <h2 className="text-base font-semibold text-gray-900 mb-4">
+              Local Vendors ({vendors.length})
+              {shortlistedVendors.size > 0 && (
+                <span className="ml-2 text-xs font-normal text-amber-600">📌 {shortlistedVendors.size} pinned</span>
+              )}
+            </h2>
             <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-green-900 text-white">
+                    <th className="px-3 py-2.5 text-center font-medium">📌</th>
                     <th className="px-3 py-2.5 text-left font-medium">Category</th>
                     <th className="px-3 py-2.5 text-left font-medium">Vendor</th>
                     <th className="px-3 py-2.5 text-left font-medium">Specialty</th>
@@ -565,16 +811,61 @@ export default function HomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vendors.map((v, i) => (
-                    <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                      <td className="px-3 py-1.5 text-gray-500 text-xs">{v.category}</td>
-                      <td className="px-3 py-1.5 font-medium">{v.vendor}</td>
-                      <td className="px-3 py-1.5 text-gray-500 text-xs">{v.specialty}</td>
-                      <td className="px-3 py-1.5 text-gray-500 text-xs">{v.area}</td>
-                      <td className="px-3 py-1.5 text-center">{v.rating}</td>
-                      <td className="px-3 py-1.5 text-xs">{v.phone}</td>
-                    </tr>
-                  ))}
+                  {[...vendors]
+                    .sort((a, b) => {
+                      const ap = shortlistedVendors.has(a.vendor) ? 0 : 1;
+                      const bp = shortlistedVendors.has(b.vendor) ? 0 : 1;
+                      return ap - bp;
+                    })
+                    .map((v, i) => {
+                      const pinned = shortlistedVendors.has(v.vendor);
+                      return (
+                        <tr key={i} className={pinned ? "bg-amber-50" : i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                          <td className="px-3 py-1.5 text-center">
+                            <button
+                              title={pinned ? "Unpin vendor" : "Pin vendor"}
+                              className={`text-base ${pinned ? "opacity-100" : "opacity-30 hover:opacity-80"}`}
+                              onClick={async () => {
+                                if (pinned) {
+                                  setShortlistedVendors((prev) => {
+                                    const next = new Set(prev);
+                                    next.delete(v.vendor);
+                                    return next;
+                                  });
+                                  if (projectId) {
+                                    await fetch(`/api/projects/${projectId}/shortlist`, {
+                                      method: "DELETE",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ vendor_name: v.vendor }),
+                                    });
+                                  }
+                                } else {
+                                  setShortlistedVendors((prev) => new Set([...prev, v.vendor]));
+                                  if (projectId) {
+                                    await fetch(`/api/projects/${projectId}/shortlist`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ vendor_name: v.vendor, category: v.category }),
+                                    });
+                                  }
+                                }
+                              }}
+                            >
+                              📌
+                            </button>
+                          </td>
+                          <td className="px-3 py-1.5 text-gray-500 text-xs">{v.category}</td>
+                          <td className="px-3 py-1.5 font-medium">
+                            {v.vendor}
+                            {pinned && <span className="ml-1 text-xs text-amber-600">📌</span>}
+                          </td>
+                          <td className="px-3 py-1.5 text-gray-500 text-xs">{v.specialty}</td>
+                          <td className="px-3 py-1.5 text-gray-500 text-xs">{v.area}</td>
+                          <td className="px-3 py-1.5 text-center">{v.rating}</td>
+                          <td className="px-3 py-1.5 text-xs">{v.phone}</td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -583,6 +874,28 @@ export default function HomePage() {
       </div>
     </main>
   );
+}
+
+// US-T2-10: Static alternative material suggestions by category keyword
+function getAltSuggestions(description: string, category: string): { budget: string; premium: string } | null {
+  const d = description.toLowerCase();
+  const c = category.toLowerCase();
+  if (d.includes('kajaria') || d.includes('somany') || c.includes('floor') || c.includes('tile')) {
+    return { budget: "Somany/Johnson — ~10% cheaper", premium: "RAK/Porcelain+++ — ~20% higher" };
+  }
+  if (d.includes('legrand') || c.includes('electrical') || c.includes('switch')) {
+    return { budget: "Anchor/Panasonic — ~35% cheaper", premium: "Schneider Unica — ~20% higher" };
+  }
+  if (d.includes('hettich') || d.includes('hafele') || c.includes('hardware')) {
+    return { budget: "Dorset/local — ~30% cheaper", premium: "Blum/Grass — ~25% higher" };
+  }
+  if (d.includes('century') || d.includes('ply') || c.includes('carpentry')) {
+    return { budget: "Local BWR ply — ~20% cheaper", premium: "Greenply Marine/Ecowood — ~15% higher" };
+  }
+  if (d.includes('asian paints') || d.includes('emulsion') || c.includes('paint')) {
+    return { budget: "Berger Bison — ~15% cheaper", premium: "Dulux Velvet Touch — ~10% higher" };
+  }
+  return null;
 }
 
 // Extracted editable BOQ row to keep JSX clean
@@ -596,6 +909,9 @@ function BOQEditRow({
   setBoqSaved: React.Dispatch<React.SetStateAction<boolean>>;
   i: number;
 }) {
+  const [showAlt, setShowAlt] = React.useState(false);
+  const alts = getAltSuggestions(r.description, r.category);
+
   function update(field: keyof BOQRow, value: string | number) {
     const u = [...editedBoqRows];
     u[rowIdx] = { ...u[rowIdx], [field]: value };
@@ -631,6 +947,27 @@ function BOQEditRow({
           r.confidence === "medium" ? "bg-yellow-100 text-yellow-800" :
           "bg-red-100 text-red-700"
         }`}>{r.confidence ?? "—"}</span>
+      </td>
+      <td className="px-2 py-1.5 text-center relative">
+        {alts && (
+          <>
+            <button
+              className="text-xs text-gray-400 hover:text-green-700 px-1"
+              title="Alternative materials"
+              onClick={() => setShowAlt((v) => !v)}
+            >⇄</button>
+            {showAlt && (
+              <div
+                className="absolute right-0 z-10 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-2 text-left"
+                onMouseLeave={() => setShowAlt(false)}
+              >
+                <p className="text-xs font-semibold text-gray-500 mb-1">Alternatives</p>
+                <p className="text-xs text-green-700 mb-1">💰 Budget: {alts.budget}</p>
+                <p className="text-xs text-amber-700">✨ Premium: {alts.premium}</p>
+              </div>
+            )}
+          </>
+        )}
       </td>
     </tr>
   );
