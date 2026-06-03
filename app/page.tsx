@@ -19,14 +19,29 @@ export default function HomePage() {
   const [tier, setTier] = useState<"Mid-tier" | "Premium">("Mid-tier");
 
   // Pre-fill from URL params when coming from "Edit / Redo" on Past Projects page
+  // Also loads saved BOQ + vendor data from DB so downloads work immediately
   useEffect(() => {
     if (typeof window === "undefined") return;
     const p = new URLSearchParams(window.location.search);
-    if (p.get("reload")) {
+    const reloadId = p.get("reload");
+    if (reloadId) {
       if (p.get("client")) setClientName(p.get("client")!);
       if (p.get("city") && CITIES.includes(p.get("city")!)) setCity(p.get("city")!);
       if (p.get("pincode")) setPincode(p.get("pincode")!);
       if (p.get("tier") === "Premium") setTier("Premium");
+      // Load saved BOQ + vendor data from DB
+      fetch(`/api/projects/${reloadId}/boq`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.boq_rows?.length > 0) {
+            setBoqRows(data.boq_rows);
+            setEditedBoqRows(data.boq_rows);
+            setProjectId(reloadId);
+            setStatus(`Loaded ${data.boq_rows.length} saved BOQ items. Upload new renders to regenerate.`);
+          }
+          if (data.vendors?.length > 0) setVendors(data.vendors);
+        })
+        .catch(() => {});
       // Clean URL without reloading
       window.history.replaceState({}, "", "/");
     }
