@@ -6,6 +6,12 @@ export interface RoomAnalysis {
   image_filename: string;
 }
 
+export type BOQPhase =
+  | "Phase 1: Civil & Flooring"
+  | "Phase 2: Carpentry"
+  | "Phase 3: Electrical & MEP"
+  | "Phase 4: Finishes & Furnishings";
+
 export interface BOQRow {
   category: string;
   description: string;
@@ -13,6 +19,7 @@ export interface BOQRow {
   qty: number;
   rate: number;
   confidence?: "high" | "medium" | "low";
+  phase?: BOQPhase;
 }
 
 export interface RateSource {
@@ -39,6 +46,8 @@ export interface ProjectData {
   pincode: string;
   tier: string;
   created_at: string;
+  status?: string;
+  client_email?: string;
 }
 
 export interface GenerateResult {

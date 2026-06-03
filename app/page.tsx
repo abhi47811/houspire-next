@@ -2,7 +2,15 @@
 
 import { useState, useRef } from "react";
 import { CITIES, CITIES_WITH_MULTIPLIERS, TIERS, ROOM_TYPES } from "@/lib/config";
-import type { RoomAnalysis, BOQRow, VendorRow } from "@/lib/types";
+import type { RoomAnalysis, BOQRow, BOQPhase, VendorRow } from "@/lib/types";
+
+const ALL_PHASES = "All Phases";
+const PHASES: BOQPhase[] = [
+  "Phase 1: Civil & Flooring",
+  "Phase 2: Carpentry",
+  "Phase 3: Electrical & MEP",
+  "Phase 4: Finishes & Furnishings",
+];
 
 export default function HomePage() {
   const [clientName, setClientName] = useState("");
@@ -14,8 +22,10 @@ export default function HomePage() {
   const [floorPlan, setFloorPlan] = useState<File | null>(null);
   const [analyses, setAnalyses] = useState<RoomAnalysis[]>([]);
   const [editedAnalyses, setEditedAnalyses] = useState<RoomAnalysis[]>([]);
+  // Per-room dimension state: [{ length, width }]
+  const [roomDims, setRoomDims] = useState<Array<{ length: string; width: string }>>([]);
 
-  const [outputFormat, setOutputFormat] = useState<"excel" | "branded">("excel");
+  const [includeGST, setIncludeGST] = useState(false);
 
   const [status, setStatus] = useState("");
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -23,6 +33,9 @@ export default function HomePage() {
   const [editedBoqRows, setEditedBoqRows] = useState<BOQRow[]>([]);
   const [boqSaved, setBoqSaved] = useState(false);
   const [vendors, setVendors] = useState<VendorRow[]>([]);
+
+  // Phase filter for BOQ table
+  const [selectedPhase, setSelectedPhase] = useState<string>(ALL_PHASES);
 
   const [loading, setLoading] = useState(false);
   const [analysing, setAnalysing] = useState(false);
@@ -41,6 +54,7 @@ export default function HomePage() {
     const data: RoomAnalysis[] = await res.json();
     setAnalyses(data);
     setEditedAnalyses(data);
+    setRoomDims(data.map(() => ({ length: "", width: "" })));
     setStatus(`Detected ${data.length} room(s) — review and edit below`);
     setAnalysing(false);
   }
@@ -57,6 +71,7 @@ export default function HomePage() {
           rooms: editedAnalyses,
           city, pincode, tier,
           client_name: clientName,
+          includeGST,
         }),
       });
       if (!res.ok) {
@@ -82,6 +97,31 @@ export default function HomePage() {
     setEditedAnalyses((prev) =>
       prev.map((a, i) => (i === idx ? { ...a, [field]: value } : a)),
     );
+  }
+
+  function updateDim(idx: number, field: "length" | "width", value: string) {
+    setRoomDims((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      const l = parseFloat(field === "length" ? value : next[idx].length);
+      const w = parseFloat(field === "width" ? value : next[idx].width);
+      if (!isNaN(l) && !isNaN(w) && l > 0 && w > 0) {
+        updateAnalysis(idx, "estimated_sqft", Math.round(l * w));
+      }
+      return next;
+    });
+  }
+
+  // Filtered rows for the BOQ table
+  const filteredRows = selectedPhase === ALL_PHASES
+    ? editedBoqRows
+    : editedBoqRows.filter((r) => r.phase === selectedPhase);
+
+  // Phase subtotals
+  function phaseSubtotal(phase: BOQPhase) {
+    return editedBoqRows
+      .filter((r) => r.phase === phase)
+      .reduce((s, r) => s + r.qty * r.rate, 0);
   }
 
   const canAnalyse = files.length > 0 && clientName && pincode;
@@ -132,7 +172,7 @@ export default function HomePage() {
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Pincode</label>
               <input
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-green-600"
                 placeholder="e.g. 500032"
                 value={pincode}
                 onChange={(e) => setPincode(e.target.value)}
@@ -148,6 +188,17 @@ export default function HomePage() {
                 {TIERS.map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>
+          </div>
+          <div className="mt-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="accent-green-700 w-4 h-4"
+                checked={includeGST}
+                onChange={(e) => setIncludeGST(e.target.checked)}
+              />
+              <span className="text-sm text-gray-700">Include GST (18%)</span>
+            </label>
           </div>
         </section>
 
@@ -205,6 +256,12 @@ export default function HomePage() {
             <div className="space-y-4">
               {editedAnalyses.map((a, i) => {
                 const confColor = { high: "bg-green-100 text-green-800", medium: "bg-yellow-100 text-yellow-800", low: "bg-red-100 text-red-800" }[a.confidence];
+                const dim = roomDims[i] ?? { length: "", width: "" };
+                const l = parseFloat(dim.length);
+                const w = parseFloat(dim.width);
+                const hasDims = !isNaN(l) && !isNaN(w) && l > 0 && w > 0;
+                const floorSqft = hasDims ? Math.round(l * w) : null;
+                const wallSqft = hasDims ? Math.round(2 * (l + w) * 9) : null;
                 return (
                   <div key={i} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-3">
@@ -224,6 +281,40 @@ export default function HomePage() {
                         <input type="number" className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
                           value={a.estimated_sqft} onChange={(e) => updateAnalysis(i, "estimated_sqft", parseInt(e.target.value))} />
                       </div>
+
+                      {/* US-T1-06: Dimension calculator */}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Length (ft)</label>
+                        <input
+                          type="number"
+                          className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
+                          placeholder="e.g. 14"
+                          value={dim.length}
+                          onChange={(e) => updateDim(i, "length", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Width (ft)</label>
+                        <input
+                          type="number"
+                          className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
+                          placeholder="e.g. 12"
+                          value={dim.width}
+                          onChange={(e) => updateDim(i, "width", e.target.value)}
+                        />
+                      </div>
+                      {hasDims && (
+                        <div className="col-span-2 bg-green-50 border border-green-200 rounded px-3 py-2 text-xs text-green-800">
+                          <span className="font-medium">Calculated: {floorSqft} sqft</span>
+                          <span className="mx-2 text-green-400">|</span>
+                          Floor: {floorSqft} sft
+                          <span className="mx-2 text-green-400">|</span>
+                          Walls: {wallSqft} sft
+                          <span className="mx-2 text-green-400">|</span>
+                          Ceiling: {floorSqft} sft
+                        </div>
+                      )}
+
                       <div className="col-span-2">
                         <label className="block text-xs text-gray-500 mb-1">Design Elements</label>
                         <textarea className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm" rows={3}
@@ -237,37 +328,11 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* Step 5: Output Format */}
+        {/* Step 5: Generate */}
         {editedAnalyses.length > 0 && (
           <section className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <span className="w-6 h-6 bg-green-900 text-white rounded-full flex items-center justify-center text-xs font-bold">5</span>
-              Output Format
-            </h2>
-            <div className="flex gap-4">
-              <label className={`flex items-center gap-3 border rounded-xl p-4 cursor-pointer flex-1 transition-colors ${outputFormat === "excel" ? "border-green-600 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}>
-                <input type="radio" name="format" value="excel" checked={outputFormat === "excel"} onChange={() => setOutputFormat("excel")} className="accent-green-700" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">📊 Plain Excel</p>
-                  <p className="text-xs text-gray-500">Internal use — BOQ Template + Rate Sources + Vendor sheets</p>
-                </div>
-              </label>
-              <label className={`flex items-center gap-3 border rounded-xl p-4 cursor-pointer flex-1 transition-colors ${outputFormat === "branded" ? "border-green-600 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}>
-                <input type="radio" name="format" value="branded" checked={outputFormat === "branded"} onChange={() => setOutputFormat("branded")} className="accent-green-700" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">🎨 Branded DOCX + PDF</p>
-                  <p className="text-xs text-gray-500">Client delivery — Houspire branded document</p>
-                </div>
-              </label>
-            </div>
-          </section>
-        )}
-
-        {/* Step 6: Generate */}
-        {editedAnalyses.length > 0 && (
-          <section className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="w-6 h-6 bg-green-900 text-white rounded-full flex items-center justify-center text-xs font-bold">6</span>
               Generate
             </h2>
             <button
@@ -308,32 +373,129 @@ export default function HomePage() {
                 className="inline-flex items-center gap-2 bg-green-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-400">
                 💬 Share on WhatsApp
               </a>
+              {/* US-T1-05: Share approval link */}
+              <button
+                className="inline-flex items-center gap-2 bg-amber-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-amber-500"
+                onClick={() => {
+                  const link = `${window.location.origin}/approve/${projectId}`;
+                  navigator.clipboard.writeText(link);
+                  alert(`Approval link copied!\n${link}`);
+                }}
+              >
+                🔗 Share Approval Link
+              </button>
             </div>
             <p className="text-xs text-green-300 mt-3">Saved to database. Access anytime at <a href="/projects" className="underline">Past Projects</a>.</p>
           </section>
         )}
 
-        {/* BOQ Preview with inline edit */}
+        {/* Payment Schedule */}
+        {projectId && (() => {
+          const total = editedBoqRows.reduce((s, r) => s + r.qty * r.rate, 0);
+          const milestones = [
+            { name: "Advance", pct: 30 },
+            { name: "Material Delivery", pct: 30 },
+            { name: "Mid-Execution", pct: 30 },
+            { name: "Completion", pct: 10 },
+          ];
+          const scheduleText = "Payment Schedule:\n" + milestones.map((m, i) =>
+            `${i + 1}. ${m.name} (${m.pct}%): ₹${Math.round(total * m.pct / 100).toLocaleString("en-IN")}`
+          ).join("\n");
+          return (
+            <section className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-gray-900">Payment Schedule</h2>
+                <button
+                  className="text-sm bg-green-900 text-white px-4 py-1.5 rounded-lg hover:bg-green-800"
+                  onClick={() => navigator.clipboard.writeText(scheduleText)}
+                >
+                  📋 Copy Schedule
+                </button>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-green-900 text-white">
+                    <th className="px-4 py-2.5 text-left font-medium rounded-tl-lg">Milestone</th>
+                    <th className="px-4 py-2.5 text-center font-medium">%</th>
+                    <th className="px-4 py-2.5 text-right font-medium rounded-tr-lg">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {milestones.map((m, i) => (
+                    <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{m.name}</td>
+                      <td className="px-4 py-2.5 text-center text-gray-600">{m.pct}%</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-green-800">
+                        ₹{Math.round(total * m.pct / 100).toLocaleString("en-IN")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })()}
+
+        {/* BOQ Preview with inline edit + phase filter */}
         {editedBoqRows.length > 0 && (
           <section className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-gray-900">BOQ Preview ({editedBoqRows.length} line items) <span className="text-xs font-normal text-gray-400">— click cells to edit</span></h2>
-              <button
-                className="text-sm bg-green-900 text-white px-4 py-1.5 rounded-lg hover:bg-green-800 disabled:opacity-50"
-                disabled={boqSaved}
-                onClick={async () => {
-                  if (!projectId) return;
-                  await fetch(`/api/projects/${projectId}/boq`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ rows: editedBoqRows }),
-                  });
-                  setBoqSaved(true);
-                }}
-              >
-                {boqSaved ? "✓ Saved" : "💾 Save Edits"}
-              </button>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <h2 className="text-base font-semibold text-gray-900">
+                BOQ Preview ({filteredRows.length}/{editedBoqRows.length} items)
+                <span className="text-xs font-normal text-gray-400 ml-2">— click cells to edit</span>
+              </h2>
+              <div className="flex items-center gap-3">
+                {/* US-T1-04: Phase filter */}
+                <select
+                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700"
+                  value={selectedPhase}
+                  onChange={(e) => setSelectedPhase(e.target.value)}
+                >
+                  <option value={ALL_PHASES}>All Phases</option>
+                  {PHASES.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                <button
+                  className="text-sm bg-green-900 text-white px-4 py-1.5 rounded-lg hover:bg-green-800 disabled:opacity-50"
+                  disabled={boqSaved}
+                  onClick={async () => {
+                    if (!projectId) return;
+                    await fetch(`/api/projects/${projectId}/boq`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ rows: editedBoqRows }),
+                    });
+                    setBoqSaved(true);
+                  }}
+                >
+                  {boqSaved ? "✓ Saved" : "💾 Save Edits"}
+                </button>
+              </div>
             </div>
+
+            {/* Phase subtotals summary (always visible) */}
+            {selectedPhase === ALL_PHASES && (
+              <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+                {PHASES.map((p) => {
+                  const sub = phaseSubtotal(p);
+                  const label = p.replace(/Phase \d: /, "");
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setSelectedPhase(p)}
+                      className="text-left bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 hover:border-green-400 transition-colors"
+                    >
+                      <p className="text-xs text-gray-500 leading-tight">{label}</p>
+                      <p className="text-sm font-semibold text-green-800 mt-0.5">
+                        ₹{Math.round(sub).toLocaleString("en-IN")}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="w-full text-sm">
                 <thead>
@@ -348,38 +510,38 @@ export default function HomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {editedBoqRows.map((r, i) => (
-                    <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                      <td className="px-1 py-0.5">
-                        <input className="w-full text-xs text-gray-500 border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-2 py-1"
-                          value={r.category} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],category:e.target.value}; setEditedBoqRows(u); setBoqSaved(false); }} />
-                      </td>
-                      <td className="px-1 py-0.5">
-                        <input className="w-full text-xs border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-2 py-1"
-                          value={r.description} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],description:e.target.value}; setEditedBoqRows(u); setBoqSaved(false); }} />
-                      </td>
-                      <td className="px-1 py-0.5">
-                        <input className="w-full text-xs text-center text-gray-500 border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
-                          value={r.unit} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],unit:e.target.value}; setEditedBoqRows(u); setBoqSaved(false); }} />
-                      </td>
-                      <td className="px-1 py-0.5">
-                        <input type="number" className="w-full text-xs text-right border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
-                          value={r.qty} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],qty:parseFloat(e.target.value)||0}; setEditedBoqRows(u); setBoqSaved(false); }} />
-                      </td>
-                      <td className="px-1 py-0.5">
-                        <input type="number" className="w-full text-xs text-right border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
-                          value={r.rate} onChange={(e) => { const u=[...editedBoqRows]; u[i]={...u[i],rate:parseFloat(e.target.value)||0}; setEditedBoqRows(u); setBoqSaved(false); }} />
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-medium text-green-800 text-xs">₹{(r.qty * r.rate).toLocaleString("en-IN")}</td>
-                      <td className="px-3 py-1.5 text-center">
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                          r.confidence === "high" ? "bg-green-100 text-green-800" :
-                          r.confidence === "medium" ? "bg-yellow-100 text-yellow-800" :
-                          "bg-red-100 text-red-700"
-                        }`}>{r.confidence ?? "—"}</span>
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    // When showing all phases, insert phase separator rows
+                    if (selectedPhase !== ALL_PHASES) {
+                      return filteredRows.map((r, i) => {
+                        const rowIdx = editedBoqRows.indexOf(r);
+                        return <BOQEditRow key={i} r={r} rowIdx={rowIdx} editedBoqRows={editedBoqRows} setEditedBoqRows={setEditedBoqRows} setBoqSaved={setBoqSaved} i={i} />;
+                      });
+                    }
+                    const elements: React.ReactNode[] = [];
+                    let lastPhase: string | undefined;
+                    editedBoqRows.forEach((r, rowIdx) => {
+                      if (r.phase !== lastPhase) {
+                        lastPhase = r.phase;
+                        const sub = phaseSubtotal((r.phase ?? "Phase 4: Finishes & Furnishings") as BOQPhase);
+                        elements.push(
+                          <tr key={`phase-${rowIdx}`} className="bg-green-50 border-t border-b border-green-200">
+                            <td colSpan={5} className="px-3 py-2 text-xs font-semibold text-green-800">
+                              {r.phase ?? "Unphased"}
+                            </td>
+                            <td className="px-3 py-2 text-xs font-semibold text-green-800 text-right">
+                              ₹{Math.round(sub).toLocaleString("en-IN")}
+                            </td>
+                            <td />
+                          </tr>
+                        );
+                      }
+                      elements.push(
+                        <BOQEditRow key={rowIdx} r={r} rowIdx={rowIdx} editedBoqRows={editedBoqRows} setEditedBoqRows={setEditedBoqRows} setBoqSaved={setBoqSaved} i={rowIdx} />
+                      );
+                    });
+                    return elements;
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -420,5 +582,56 @@ export default function HomePage() {
         )}
       </div>
     </main>
+  );
+}
+
+// Extracted editable BOQ row to keep JSX clean
+function BOQEditRow({
+  r, rowIdx, editedBoqRows, setEditedBoqRows, setBoqSaved, i,
+}: {
+  r: BOQRow;
+  rowIdx: number;
+  editedBoqRows: BOQRow[];
+  setEditedBoqRows: React.Dispatch<React.SetStateAction<BOQRow[]>>;
+  setBoqSaved: React.Dispatch<React.SetStateAction<boolean>>;
+  i: number;
+}) {
+  function update(field: keyof BOQRow, value: string | number) {
+    const u = [...editedBoqRows];
+    u[rowIdx] = { ...u[rowIdx], [field]: value };
+    setEditedBoqRows(u);
+    setBoqSaved(false);
+  }
+  return (
+    <tr className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+      <td className="px-1 py-0.5">
+        <input className="w-full text-xs text-gray-500 border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-2 py-1"
+          value={r.category} onChange={(e) => update("category", e.target.value)} />
+      </td>
+      <td className="px-1 py-0.5">
+        <input className="w-full text-xs border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-2 py-1"
+          value={r.description} onChange={(e) => update("description", e.target.value)} />
+      </td>
+      <td className="px-1 py-0.5">
+        <input className="w-full text-xs text-center text-gray-500 border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
+          value={r.unit} onChange={(e) => update("unit", e.target.value)} />
+      </td>
+      <td className="px-1 py-0.5">
+        <input type="number" className="w-full text-xs text-right border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
+          value={r.qty} onChange={(e) => update("qty", parseFloat(e.target.value) || 0)} />
+      </td>
+      <td className="px-1 py-0.5">
+        <input type="number" className="w-full text-xs text-right border-0 bg-transparent focus:bg-white focus:ring-1 focus:ring-green-400 rounded px-1 py-1"
+          value={r.rate} onChange={(e) => update("rate", parseFloat(e.target.value) || 0)} />
+      </td>
+      <td className="px-3 py-1.5 text-right font-medium text-green-800 text-xs">₹{(r.qty * r.rate).toLocaleString("en-IN")}</td>
+      <td className="px-3 py-1.5 text-center">
+        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+          r.confidence === "high" ? "bg-green-100 text-green-800" :
+          r.confidence === "medium" ? "bg-yellow-100 text-yellow-800" :
+          "bg-red-100 text-red-700"
+        }`}>{r.confidence ?? "—"}</span>
+      </td>
+    </tr>
   );
 }

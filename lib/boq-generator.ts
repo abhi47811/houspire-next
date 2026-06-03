@@ -1,6 +1,48 @@
 import { getAnthropicClient } from "./anthropic";
 import { getSupabaseClient } from "./supabase";
-import type { BOQRow, RateSource, RoomAnalysis } from "./types";
+import type { BOQRow, BOQPhase, RateSource, RoomAnalysis } from "./types";
+
+const PHASE_MAP: Record<string, BOQPhase> = {
+  flooring: "Phase 1: Civil & Flooring",
+  waterproofing: "Phase 1: Civil & Flooring",
+  ceiling: "Phase 1: Civil & Flooring",
+  gypsum: "Phase 1: Civil & Flooring",
+  civil: "Phase 1: Civil & Flooring",
+  tile: "Phase 1: Civil & Flooring",
+  carpentry: "Phase 2: Carpentry",
+  wardrobe: "Phase 2: Carpentry",
+  kitchen: "Phase 2: Carpentry",
+  "tv unit": "Phase 2: Carpentry",
+  cabinet: "Phase 2: Carpentry",
+  desk: "Phase 2: Carpentry",
+  shelv: "Phase 2: Carpentry",
+  electrical: "Phase 3: Electrical & MEP",
+  lighting: "Phase 3: Electrical & MEP",
+  hvac: "Phase 3: Electrical & MEP",
+  ac: "Phase 3: Electrical & MEP",
+  fan: "Phase 3: Electrical & MEP",
+  switch: "Phase 3: Electrical & MEP",
+  socket: "Phase 3: Electrical & MEP",
+  wiring: "Phase 3: Electrical & MEP",
+  plumbing: "Phase 3: Electrical & MEP",
+  bathroom: "Phase 4: Finishes & Furnishings",
+  hardware: "Phase 4: Finishes & Furnishings",
+  textile: "Phase 4: Finishes & Furnishings",
+  curtain: "Phase 4: Finishes & Furnishings",
+  decor: "Phase 4: Finishes & Furnishings",
+  rug: "Phase 4: Finishes & Furnishings",
+  paint: "Phase 4: Finishes & Furnishings",
+  wallpaper: "Phase 4: Finishes & Furnishings",
+  fixture: "Phase 4: Finishes & Furnishings",
+};
+
+function inferPhase(category: string, description: string): BOQPhase {
+  const text = `${category} ${description}`.toLowerCase();
+  for (const [keyword, phase] of Object.entries(PHASE_MAP)) {
+    if (text.includes(keyword)) return phase;
+  }
+  return "Phase 4: Finishes & Furnishings";
+}
 
 // Fetch brands unavailable in a city to warn Claude not to specify them
 async function fetchUnavailableBrands(city: string): Promise<string> {
@@ -102,12 +144,18 @@ GRANULARITY — always produce sample-level detail:
 OUTPUT FORMAT: Return ONLY valid JSON — no markdown, no explanation. Schema:
 {
   "boq": [
-    { "category": string, "description": string, "unit": string, "qty": number, "rate": number }
+    { "category": string, "description": string, "unit": string, "qty": number, "rate": number, "phase": "Phase 1: Civil & Flooring" | "Phase 2: Carpentry" | "Phase 3: Electrical & MEP" | "Phase 4: Finishes & Furnishings" }
   ],
   "sources": [
     { "item": string, "basis": string, "source": string }
   ]
-}`;
+}
+
+PHASE ASSIGNMENT RULES:
+- Phase 1: Civil & Flooring — Flooring, Waterproofing, Ceiling (false ceiling, gypsum work)
+- Phase 2: Carpentry — Wardrobes, modular kitchen, TV units, all carpentry items
+- Phase 3: Electrical & MEP — Electrical points, lighting, HVAC/AC, plumbing
+- Phase 4: Finishes & Furnishings — Textiles, bathroom fixtures, hardware, decor, paint, wallpaper`;
 
 function buildUserPrompt(rooms: RoomAnalysis[], city: string, pincode: string, tier: string) {
   const roomSummary = rooms
@@ -160,7 +208,7 @@ export async function generateBOQ(
       ? raw.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "")
       : raw;
     const parsed = JSON.parse(json) as {
-      boq: Array<{ category: string; description: string; unit: string; qty: number; rate: number }>;
+      boq: Array<{ category: string; description: string; unit: string; qty: number; rate: number; phase?: string }>;
       sources: Array<{ item: string; basis: string; source: string }>;
     };
 
@@ -173,6 +221,7 @@ export async function generateBOQ(
         qty: Number(r.qty),
         rate: Number(r.rate),
         confidence: scoreConfidence(Number(r.rate), String(r.description), rateLookup),
+        phase: (r.phase as BOQPhase) ?? inferPhase(String(r.category), String(r.description)),
       }));
 
     const sources: RateSource[] = (parsed.sources ?? [])

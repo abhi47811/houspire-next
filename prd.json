@@ -1,15 +1,240 @@
 {
-  "project": "Houspire Budget Generator — 10 Improvements",
+  "project": "Houspire Budget Generator — 18 Enhancements across 4 Tiers",
   "stories": [
-    { "id": "US-001", "title": "Structured JSON output from Claude", "passes": true },
-    { "id": "US-002", "title": "Rate library in Supabase DB", "passes": true },
-    { "id": "US-003", "title": "City vendor database (3-5 per category)", "passes": true },
-    { "id": "US-004", "title": "BOQ formula verifier", "passes": true },
-    { "id": "US-005", "title": "Multi-render accuracy improvement", "passes": true },
-    { "id": "US-006", "title": "Rate source scraper cron", "passes": true },
-    { "id": "US-007", "title": "Branded PDF with @react-pdf/renderer", "passes": true },
-    { "id": "US-008", "title": "BOQ inline edit", "passes": true },
-    { "id": "US-009", "title": "Project comparison page", "passes": true },
-    { "id": "US-010", "title": "WhatsApp share button", "passes": true }
+    {
+      "id": "US-T1-01",
+      "title": "Unified flow — always generate Excel + PDF together",
+      "tier": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Output format selector (Step 5) removed from page.tsx",
+        "Generate button always produces both Excel and BOQ PDF simultaneously",
+        "Downloads section shows Excel + PDF + WhatsApp share on every generation",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T1-02",
+      "title": "GST toggle",
+      "tier": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Checkbox 'Include GST (18%)' shown in Step 1 client details",
+        "When enabled, BOQ Excel gets a GST row = 18% of total",
+        "GST row labelled separately, not bundled with line items",
+        "PDF also shows GST total when enabled",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T1-03",
+      "title": "Payment milestone schedule",
+      "tier": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "After BOQ generated, show Payment Schedule section below downloads",
+        "Schedule: Advance 30%, Material delivery 30%, Mid-execution 30%, Completion 10%",
+        "Each milestone shows amount in INR based on BOQ total",
+        "Copy as text button for WhatsApp sharing",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T1-04",
+      "title": "Phase-wise BOQ",
+      "tier": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "BOQ table has Phase column grouping items: Phase 1 Civil/Flooring, Phase 2 Carpentry, Phase 3 Electrical/MEP/HVAC, Phase 4 Soft Furnishings",
+        "Phase totals shown as subtotals in table",
+        "Phase grouping applied in PDF output",
+        "Phase filter dropdown to view one phase at a time",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T1-05",
+      "title": "Client approval flow — shareable link",
+      "tier": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "GET /approve/[projectId] public page shows read-only BOQ for client",
+        "Page shows client name, city, BOQ table, total, vendor list",
+        "Approve button sends POST to /api/projects/[id]/approve, sets status=approved in DB",
+        "projects table gets status column (draft/shared/approved)",
+        "Share link button copies URL to clipboard",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T1-06",
+      "title": "Quantity calculator from dimensions",
+      "tier": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "After room analysis, show dimension inputs: length (ft) x width (ft) per room",
+        "Auto-calculate floor sqft, wall rft, ceiling sqft from dimensions",
+        "Pre-fill estimated_sqft from dimensions if provided",
+        "Show calculated quantities next to each room card",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T2-07",
+      "title": "Design style auto-detection",
+      "tier": 2,
+      "passes": false,
+      "acceptanceCriteria": [
+        "room-analyzer.ts detects style: modern/contemporary/traditional/industrial/minimalist",
+        "style field added to RoomAnalysis type",
+        "Detected style shown as badge on room card (Step 4)",
+        "BOQ system prompt receives style context to adjust finish/material recommendations",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T2-08",
+      "title": "Smart gap detection",
+      "tier": 2,
+      "passes": false,
+      "acceptanceCriteria": [
+        "After BOQ generated, check for missing critical items per room type",
+        "Missing items shown as amber warning badges (e.g. 'Living Room: no false ceiling detected')",
+        "Gap rules: bedroom needs wardrobe+AC; living needs false ceiling+AC; kitchen needs countertop; bath needs waterproofing",
+        "One-click 'Add missing item' button appends to BOQ",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T2-09",
+      "title": "Cost optimization suggestions",
+      "tier": 2,
+      "passes": false,
+      "acceptanceCriteria": [
+        "After BOQ generated, show Savings section with 3-5 suggestions",
+        "Each suggestion: item name, current spec, cheaper alternative, potential saving in INR",
+        "Examples: Morbi tiles instead of Kajaria saves X, Anchor switches instead of Legrand saves Y",
+        "Accept/Reject buttons per suggestion — accepting updates BOQ row",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T2-10",
+      "title": "Alternative materials per line item",
+      "tier": 2,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Each BOQ row has an expand button showing 2 alternatives: Budget (lower spec) and Premium (higher spec)",
+        "Each alternative shows different brand, rate, and delta from current",
+        "Clicking an alternative swaps the row",
+        "Swap updates editedBoqRows state",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T2-11",
+      "title": "Budget vs actual tracking",
+      "tier": 2,
+      "passes": false,
+      "acceptanceCriteria": [
+        "On project detail/download page, show 'Enter Actual Cost' input",
+        "projects table gets actual_total_inr column",
+        "When actual entered, show variance: estimated vs actual, % over/under",
+        "Variance shown in green (under budget) or red (over budget)",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T3-12",
+      "title": "Email delivery of BOQ PDF",
+      "tier": 3,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Email input field in downloads section",
+        "Send PDF button calls POST /api/send-boq with recipient email",
+        "Uses Resend API (RESEND_API_KEY env var) to email PDF attachment",
+        "Success/error toast shown",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T3-13",
+      "title": "Work order generation per contractor",
+      "tier": 3,
+      "passes": false,
+      "acceptanceCriteria": [
+        "GET /api/download/work-order?id=<projectId>&phase=<phase> endpoint",
+        "Returns Excel with only that phase's BOQ rows",
+        "Header: project name, city, phase name, date",
+        "Work order buttons per phase in downloads section",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T3-14",
+      "title": "Vendor shortlist per project",
+      "tier": 3,
+      "passes": false,
+      "acceptanceCriteria": [
+        "vendor_shortlist table: project_id, vendor_id (from vendors_db), category",
+        "Pin icon on each vendor row in vendor preview — click to shortlist",
+        "Shortlisted vendors shown first in vendor list with 📌 badge",
+        "Shortlist persists to DB and survives page refresh",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T3-15",
+      "title": "Project analytics dashboard",
+      "tier": 3,
+      "passes": false,
+      "acceptanceCriteria": [
+        "/analytics page showing: total projects, avg BOQ value by city, projects by tier, top 5 categories by spend",
+        "Bar chart (using plain CSS, no chart library) showing city distribution",
+        "Recent 10 projects table with client, city, total, date",
+        "Link from header navigation",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T4-16",
+      "title": "PWA manifest",
+      "tier": 4,
+      "passes": false,
+      "acceptanceCriteria": [
+        "public/manifest.json with name, short_name, icons, theme_color=#1B4D3E",
+        "app/layout.tsx links manifest",
+        "Service worker registered for basic offline caching of static assets",
+        "Install prompt works on mobile Chrome",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T4-17",
+      "title": "Multi-user team login via Supabase Auth",
+      "tier": 4,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Login page at /login with email+password via Supabase Auth",
+        "Middleware redirects unauthenticated users to /login",
+        "projects table has created_by UUID column linked to auth.users",
+        "Each user only sees their own projects in past projects list",
+        "Logout button in header",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    },
+    {
+      "id": "US-T4-18",
+      "title": "Contractor portal — submit quote against BOQ",
+      "tier": 4,
+      "passes": false,
+      "acceptanceCriteria": [
+        "GET /quote/[projectId] public page shows BOQ line items to contractor",
+        "Contractor enters name, company, and price per line item",
+        "Submit saves to contractor_quotes table: project_id, contractor_name, line_item_quotes JSONB",
+        "Staff can view submitted quotes on project page",
+        "TypeScript compiles, Vercel deploys"
+      ]
+    }
   ]
 }
