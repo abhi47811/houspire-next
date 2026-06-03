@@ -71,6 +71,39 @@ export async function analyzeAllRenders(
   }
 }
 
+export async function analyzeFloorPlan(
+  imageBase64: string, mediaType: string
+): Promise<Array<{room_type: string; estimated_sqft: number; length_ft?: number; width_ft?: number}>> {
+  const client = getAnthropicClient();
+  try {
+    const resp = await client.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1024,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg"|"image/png", data: imageBase64 }},
+          { type: "text", text: `Analyze this floor plan image. Extract all rooms with their approximate dimensions.
+
+Return ONLY a JSON array. For each room:
+- room_type: one of [Living Room, Master Bedroom, Bedroom, Kitchen, Bathroom, Study / Home Office, Dining Room, Foyer / Entrance, Balcony]
+- estimated_sqft: integer (best estimate from the plan)
+- length_ft: estimated length in feet (integer)
+- width_ft: estimated width in feet (integer)
+
+Example: [{"room_type":"Master Bedroom","estimated_sqft":180,"length_ft":15,"width_ft":12}]
+Return only the JSON array, no other text.` }
+        ]
+      }]
+    });
+    const text = (resp.content[0] as {text:string}).text.trim();
+    const json = text.startsWith('```') ? text.split('```')[1].replace(/^json/,'').trim() : text;
+    return JSON.parse(json);
+  } catch {
+    return [];
+  }
+}
+
 async function analyzeSingle(
   client: ReturnType<typeof getAnthropicClient>,
   img: { base64: string; mediaType: string; filename: string },

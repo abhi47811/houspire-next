@@ -67,12 +67,33 @@ export default function HomePage() {
     setStatus("Analysing renders with Claude Vision…");
     const form = new FormData();
     files.forEach((f) => form.append("images", f));
+    if (floorPlan) form.append("floorplan", floorPlan);
     const res = await fetch("/api/analyse", { method: "POST", body: form });
-    const data: RoomAnalysis[] = await res.json();
-    setAnalyses(data);
-    setEditedAnalyses(data);
-    setRoomDims(data.map(() => ({ length: "", width: "" })));
-    setStatus(`Detected ${data.length} room(s) — review and edit below`);
+    const data: { rooms: RoomAnalysis[]; floorPlanRooms: Array<{room_type: string; estimated_sqft: number; length_ft?: number; width_ft?: number}> } = await res.json();
+    setAnalyses(data.rooms);
+    setEditedAnalyses(data.rooms);
+    setRoomDims(data.rooms.map(() => ({ length: "", width: "" })));
+    if (data.floorPlanRooms && data.floorPlanRooms.length > 0) {
+      // Pre-populate dimensions from floor plan
+      const newDims = data.floorPlanRooms.map((r) => ({
+        length: r.length_ft ? String(r.length_ft) : "",
+        width: r.width_ft ? String(r.width_ft) : "",
+      }));
+      setRoomDims(newDims);
+      // If floor plan has rooms but renders don't (or few renders), use floor plan rooms
+      if (data.rooms.length === 0 && data.floorPlanRooms.length > 0) {
+        const fpAnalyses = data.floorPlanRooms.map((r, i) => ({
+          room_type: r.room_type,
+          estimated_sqft: r.estimated_sqft,
+          confidence: "medium" as const,
+          design_elements: "Extracted from floor plan — add design details from renders",
+          image_filename: `floor_plan_room_${i + 1}`,
+        }));
+        setAnalyses(fpAnalyses);
+        setEditedAnalyses(fpAnalyses);
+      }
+    }
+    setStatus(`Detected ${data.rooms.length} room(s) — review and edit below`);
     setAnalysing(false);
   }
 
@@ -431,6 +452,10 @@ export default function HomePage() {
               <a href={`/api/download/boq-pdf?id=${projectId}`}
                 className="inline-flex items-center gap-2 bg-amber-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-amber-400" download>
                 📑 Branded BOQ PDF
+              </a>
+              <a href={`/api/download/vendors-pdf?id=${projectId}`}
+                className="inline-flex items-center gap-2 bg-amber-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-amber-500" download>
+                📑 Branded Vendor PDF
               </a>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(`Houspire BOQ for ${clientName} - ${city} | ${boqRows.length} items | Est. ₹${Math.round(boqRows.reduce((s, r) => s + r.qty * r.rate, 0)).toLocaleString("en-IN")} | View project: https://houspire-next.vercel.app/projects`)}`}
