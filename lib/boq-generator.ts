@@ -133,11 +133,20 @@ TEMPLATE RULES (non-negotiable):
 
 GRANULARITY — always produce sample-level detail:
 - ELECTRICAL: Individual points — 6A switch (Legrand Arteor); 16A socket; dedicated 16A AC point; USB-C outlet; ceiling fan drop; TV-wall MS reinforcement; FR-LSH wiring lump (Polycab/Havells).
-- LIGHTING: Cove LED strip (SMD 14W/m, 3000K) by rft; COB downlights 5W trimless by nos; BLDC fan (Atomberg/Anemos) by nos.
+- LIGHTING: Cove LED strip (SMD 14W/m, 3000K) by rft; COB downlights 5W trimless by nos; BLDC fan (Atomberg/Anemos) by nos; bedside lamps by nos; pendant lights where visible.
 - HARDWARE: Hettich Sensys hinges (pair); Hettich Quadro slides (pair); Hafele Magic Corner (nos); profile handles (nos).
 - AC: Unit on one line; install kit on the NEXT separate line. Always two rows.
 - CARPENTRY: Each piece separately — wardrobe, loft, desk, shelves, bedside, TV unit. Never bundle.
-- Brands required: Century BWR ply, Greenlam laminate, Kajaria/Somany tiles, Mikasa engineered wood, Legrand Arteor switches, Polycab/Havells cable, Atomberg fans, Asian Paints Royale Luxury Emulsion, Marshalls/Excel wallpaper, Hettich/Hafele hardware.
+- FURNITURE (ALWAYS INCLUDE — this is Houspire scope): Include loose furniture visible in renders. Each piece separately:
+  * Living Room: sofa set (3+2+1 seater or L-shape), center/coffee table, side tables, console/foyer table
+  * Master Bedroom: double bed with headboard, side tables (pair), dresser/dressing unit, ottoman/bench
+  * Bedroom: single/double bed, wardrobe (if not built-in), study chair
+  * Dining: dining table + chairs (quote as set)
+  * Study: study chair, bookshelf (if not built-in)
+  * Use brands: Godrej Interio, Durian, Pepperfry premium, Urban Ladder, HomeTown
+- SOFT FURNISHINGS: Curtains (sheer + drape + track by rft); area rugs by nos; cushion sets; bed linen set; throw pillows.
+- BATHROOM: Each fitting separately — WC, basin mixer, health faucet, shower set, mirror, towel ring, soap dispenser.
+- Brands required: Century BWR ply, Greenlam laminate, Kajaria/Somany tiles, Mikasa engineered wood, Legrand Arteor switches, Polycab/Havells cable, Atomberg fans, Asian Paints Royale Luxury Emulsion, Marshalls/Excel wallpaper, Hettich/Hafele hardware, Godrej Interio/Durian furniture.
 
 {{RATE_LIBRARY}}
 
@@ -192,18 +201,42 @@ export async function generateBOQ(
     fetchRateLookup(city),
   ]);
   const fallbackRates = `RATE LIBRARY — Hyderabad baseline:
-Gypsum FC cove+paint: 165/sft | Wardrobe premium: 2200/sft | Wardrobe loft: 1750/sft
+Gypsum FC cove+paint: 165/sft | Coffered FC: 180/sft | Wood-veneer slat ceiling: 920/sft
+Wardrobe premium: 2200/sft | Wardrobe loft: 1750/sft | Built-in TV unit: 1800-2000/sft
+Study desk+drawer+cabinet: 1334/sft | Modular kitchen base: 2100/sft | wall: 1900/sft
+Quartz countertop 20mm: 800/sft | Crockery unit: 2050/sft
 Premium vitrified Kajaria/Somany: 179/sft | Engineered wood Mikasa: 430/sft
-Wall emulsion Royale Luxury: 38/sft | COB downlights 5W: 650/nos
-LED cove strip 14W/m: 110/rft | BLDC fan Atomberg: 14000/nos
-6A switch Legrand Arteor: 1150/nos | 16A socket: 1450/nos
-Split AC 1.5T Daikin: 51000/nos | Split AC install kit: 11000/lump
-Hettich Sensys hinge: 350/pair | Hettich Quadro slide: 1400/pair`;
+Wall emulsion Royale Luxury: 38/sft | Wallpaper supply+install: 140-152/sft
+Bath wall tile porcelain: 260/sft | Bath floor tile anti-skid: 230/sft
+COB downlights 5W: 650/nos | LED cove strip 14W/m: 110/rft
+BLDC fan Atomberg with light kit: 14000/nos | Bedside lamp brass: 4140/nos
+Pendant light decorative: 5500-12000/nos
+6A switch Legrand Arteor: 1150/nos | 16A socket: 1450/nos | USB-C outlet: 1900/nos
+Split AC 1.5T Daikin 5-star: 51000/nos | Split AC 1.5T install kit: 11000/lump
+Split AC 2.0T Daikin: 62000/nos | Split AC 2.0T install kit: 12000/lump
+Hettich Sensys hinge: 350/pair | Hettich Quadro slide: 1400/pair | Profile handle: 380-580/nos
+Curtains sheer+drape+track: 650-750/rft | Area rug premium: 7820/nos
+FURNITURE (Godrej Interio / Durian / Pepperfry premium):
+L-shape sofa set fabric 3+2: 65000-95000/nos | 3-seater sofa fabric: 35000-55000/nos
+Coffee table glass+wood: 12000-22000/nos | Side table pair: 8000-15000/nos
+Console/foyer table: 14000-25000/nos | Bookshelf 6-shelf: 18000-28000/nos
+Double bed teak/engineered wood king: 45000-75000/nos | Double bed queen: 35000-55000/nos
+Bedside table pair with drawer: 16000-28000/nos | Dressing table+stool: 22000-38000/nos
+Dining table 6-seater: 35000-65000/set | Dining chair per piece: 4500-8000/nos
+Study chair ergonomic: 12000-22000/nos | Ottoman/bench fabric: 8000-15000/nos
+BATHROOM FIXTURES:
+Wall-hung WC+Geberit cistern+flush plate: 28000-36000/nos
+Rain shower head+arm: 9500-12000/nos | Hand shower+hose+bracket: 4500-5500/nos
+Concealed 3-way diverter: 9500-13000/nos | Basin mixer: 7500-10000/nos
+Health faucet: 3500/nos | Backlit LED mirror anti-fog: 8000-9500/nos
+Fluted vanity+stone counter: 14000-22000/nos | Towel ring+robe hook set: 3500-5500/nos
+Soap dispenser wall-mount: 2500-3500/nos
+Waterproofing crystalline+polymer: 95/sft | Waterproof FC: 145/sft`;
   const rateSection = (rateLibrary || fallbackRates) + brandWarnings;
   const systemPrompt = BOQ_SYSTEM_PROMPT.replace("{{RATE_LIBRARY}}", rateSection);
   const resp = await client.messages.create({
     model: "claude-sonnet-4-5",
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: systemPrompt,
     messages: [{ role: "user", content: buildUserPrompt(rooms, city, pincode, tier) }],
   });
