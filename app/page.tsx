@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { CITIES, CITIES_WITH_MULTIPLIERS, TIERS, ROOM_TYPES } from "@/lib/config";
 import type { RoomAnalysis, BOQRow, BOQPhase, VendorRow } from "@/lib/types";
 
@@ -17,6 +17,20 @@ export default function HomePage() {
   const [city, setCity] = useState("Hyderabad");
   const [pincode, setPincode] = useState("");
   const [tier, setTier] = useState<"Mid-tier" | "Premium">("Mid-tier");
+
+  // Pre-fill from URL params when coming from "Edit / Redo" on Past Projects page
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("reload")) {
+      if (p.get("client")) setClientName(p.get("client")!);
+      if (p.get("city") && CITIES.includes(p.get("city")!)) setCity(p.get("city")!);
+      if (p.get("pincode")) setPincode(p.get("pincode")!);
+      if (p.get("tier") === "Premium") setTier("Premium");
+      // Clean URL without reloading
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
 
   const [files, setFiles] = useState<File[]>([]);
   const [floorPlan, setFloorPlan] = useState<File | null>(null);
