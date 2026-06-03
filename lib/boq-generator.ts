@@ -93,7 +93,7 @@ function scoreConfidence(rate: number, description: string, lookup: Map<string, 
     }
   }
   // Rate exists but outside tolerance → medium; no match → low
-  for (const [item, _] of lookup) {
+  for (const [item] of lookup) {
     if (desc.includes(item.split(" ")[0])) return "medium";
   }
   return "low";

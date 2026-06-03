@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { CITIES, CITIES_WITH_MULTIPLIERS, TIERS, ROOM_TYPES } from "@/lib/config";
 import type { RoomAnalysis, BOQRow, BOQPhase, VendorRow } from "@/lib/types";
 
