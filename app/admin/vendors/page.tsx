@@ -73,17 +73,22 @@ export default function VendorAdminPage() {
           headers: { "Content-Type": "application/json", "x-admin-key": "houspire-admin-2026" },
           body: JSON.stringify({ city, category: cat, zone }),
         });
-        const data = await res.json() as ZoneResult & { inserted?: number };
-        const r: ZoneResult = { zone, category: cat, inserted: data.inserted ?? 0, vendors: data.vendors, error: data.error };
+        const data = await res.json() as ZoneResult & { inserted?: number; error?: unknown };
+        // Ensure error is always a string (not [object Object])
+        const errMsg = data.error
+          ? (typeof data.error === "string" ? data.error : JSON.stringify(data.error))
+          : undefined;
+        const r: ZoneResult = { zone, category: cat, inserted: data.inserted ?? 0, vendors: data.vendors, error: errMsg };
         allResults.push(r);
         setResults([...allResults]);
-        setLog((prev) => [...prev, data.error
-          ? `  ✗ ${zone}: ${data.error}`
+        setLog((prev) => [...prev, errMsg
+          ? `  ✗ ${zone}: ${errMsg}`
           : `  ✓ ${zone}: ${data.inserted} vendors`]);
       } catch (e) {
-        allResults.push({ zone, category: cat, inserted: 0, error: String(e) });
+        const errStr = e instanceof Error ? e.message : String(e);
+        allResults.push({ zone, category: cat, inserted: 0, error: errStr });
         setResults([...allResults]);
-        setLog((prev) => [...prev, `  ✗ ${zone}: ${e}`]);
+        setLog((prev) => [...prev, `  ✗ ${zone}: ${errStr}`]);
       }
     }
   }

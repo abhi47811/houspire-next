@@ -105,7 +105,19 @@ Find 5-8 real businesses. Return ONLY this JSON array:
     "rating": "4.0 (354)",
     "contact": "+91 XXXXX XXXXX or NA"
   }
-]`;
+]
+
+CRITICAL: Your response must start with [ and end with ]. No prose, no explanation, only the JSON array.`;
+
+// Simpler fallback prompt when main prompt fails to produce JSON
+const FALLBACK_PROMPT = (city: string, zone: string, category: string, searchTerms: string[]) => `
+List 5 real businesses in ${zone} area of ${city}, India that sell: ${category}
+
+Search: "${searchTerms[0]} ${zone} ${city} justdial"
+
+For each business return this exact JSON array (no other text):
+[{"vendor":"name","specialty":"what they sell","full_address":"locality, ${city}","area":"${zone}, ${city}","rating":"","contact":""}]
+`;
 
 function isAuthorized(req: NextRequest): boolean {
   const headerKey = req.headers.get("x-admin-key");
@@ -162,8 +174,25 @@ export async function POST(req: NextRequest) {
       .map((b) => (b as { type: "text"; text: string }).text)
       .join("");
 
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return NextResponse.json({ error: "No JSON array in response", raw: text.slice(0, 300) }, { status: 422 });
+    let jsonMatch = text.match(/\[[\s\S]*\]/);
+
+    // Retry with simpler fallback prompt if no JSON array found
+    if (!jsonMatch) {
+      const fallbackResp = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1500,
+        tools: [{ type: "web_search_20250305" as const, name: "web_search" }],
+        messages: [{ role: "user", content: FALLBACK_PROMPT(city, searchZone, category, searchTerms) }],
+      });
+      const fallbackText = fallbackResp.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("");
+      jsonMatch = fallbackText.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        return NextResponse.json({ error: `No vendors found for ${category} in ${searchZone}. Try a different zone or category.`, zone: searchZone }, { status: 422 });
+      }
+    }
 
     const vendors = JSON.parse(jsonMatch[0]) as Array<{
       vendor: string; specialty: string; full_address?: string; area: string;
