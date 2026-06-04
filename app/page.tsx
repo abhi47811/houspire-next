@@ -18,6 +18,15 @@ export default function HomePage() {
   const [city, setCity] = useState("Hyderabad");
   const [pincode, setPincode] = useState("");
   const [tier, setTier] = useState<"Mid-tier" | "Premium">("Mid-tier");
+  const [dataQuality, setDataQuality] = useState<{ vendors: { highQuality: number; total: number }; ready: boolean } | null>(null);
+
+  // Fetch data quality for selected city
+  useEffect(() => {
+    fetch(`/api/data-quality?city=${encodeURIComponent(city)}`)
+      .then((r) => r.json())
+      .then(setDataQuality)
+      .catch(() => setDataQuality(null));
+  }, [city]);
 
   // Pre-fill from URL params when coming from "Edit / Redo" on Past Projects page
   // Also loads saved BOQ + vendor data from DB so downloads work immediately
@@ -249,6 +258,21 @@ export default function HomePage() {
           <h1 className="text-xl font-bold tracking-wide">HOUSPIRE</h1>
           <p className="text-xs text-green-300">Budget Generator — Internal Tool</p>
         </div>
+        {/* Data quality badge for selected city */}
+        {dataQuality && (
+          <div className="hidden md:flex items-center gap-2 mx-4">
+            {dataQuality.ready ? (
+              <span className="text-xs bg-green-700 text-green-100 px-2 py-1 rounded-full">
+                ✓ {city}: {dataQuality.vendors.highQuality} verified vendors
+              </span>
+            ) : (
+              <a href={`/admin/vendors?key=houspire-admin-2026`}
+                className="text-xs bg-amber-500 text-black px-2 py-1 rounded-full hover:bg-amber-400 font-medium">
+                ⚠ {city}: {dataQuality.vendors.highQuality}/{dataQuality.vendors.total} vendors verified — seed more
+              </a>
+            )}
+          </div>
+        )}
         <div className="flex gap-2">
           <a href="/analytics" className="text-sm bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg font-medium transition-colors">
             📊 Analytics

@@ -196,12 +196,33 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const { error } = await db.from("vendors_db").insert(rows);
+    // Layer 2: API validation — reject rows that would violate DB constraints
+    const validRows = rows.filter((r) => {
+      if (!r.vendor || r.vendor.trim() === "") return false;          // must have name
+      if (!r.area || r.area.trim() === "") return false;              // must have area
+      if (r.area.includes("verify on Google")) return false;          // placeholder area
+      if (!r.data_source || r.data_source.trim() === "") return false; // must track origin
+      return true;
+    });
+
+    const rejectedCount = rows.length - validRows.length;
+
+    if (validRows.length === 0) {
+      return NextResponse.json({
+        error: "All vendors rejected by validation — names or areas were empty/placeholder",
+        rejected: rejectedCount,
+        zone: searchZone,
+      }, { status: 422 });
+    }
+
+    const { error } = await db.from("vendors_db").insert(validRows);
     if (error) throw error;
 
     return NextResponse.json({
-      ok: true, city, category, zone: searchZone, inserted: rows.length,
-      vendors: rows.map((r) => ({ vendor: r.vendor, phone: r.phone, rating: r.rating, area: r.area })),
+      ok: true, city, category, zone: searchZone,
+      inserted: validRows.length,
+      rejected: rejectedCount,
+      vendors: validRows.map((r) => ({ vendor: r.vendor, phone: r.phone, rating: r.rating, area: r.area })),
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
