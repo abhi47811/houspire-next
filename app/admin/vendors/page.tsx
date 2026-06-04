@@ -3,26 +3,30 @@
 import { useState, useEffect } from "react";
 import { CITIES } from "@/lib/config";
 
-const CATEGORIES = [
-  "Flooring", "Carpentry / Wardrobe", "Electrical",
-  "Lighting / Fans", "Hardware", "HVAC", "Painting",
-];
+interface VendorResult {
+  vendor: string;
+  phone: string;
+  rating: string;
+  area: string;
+}
 
-interface SeedResult {
+interface ZoneResult {
+  zone: string;
   category: string;
   inserted: number;
-  vendors?: Array<{ vendor: string; phone: string; rating: string }>;
+  vendors?: VendorResult[];
   error?: string;
 }
 
 export default function VendorAdminPage() {
   const [accessGranted, setAccessGranted] = useState(false);
   const [city, setCity] = useState("Hyderabad");
-  const [pincode, setPincode] = useState("");
-  const [category, setCategory] = useState("Flooring");
-  const [mode, setMode] = useState<"single" | "all">("single");
+  const [category, setCategory] = useState("");
+  const [zones, setZones] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedZones, setSelectedZones] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<SeedResult[]>([]);
+  const [results, setResults] = useState<ZoneResult[]>([]);
   const [log, setLog] = useState<string[]>([]);
 
   useEffect(() => {
@@ -30,72 +34,88 @@ export default function VendorAdminPage() {
     setAccessGranted(params.get("key") === "houspire-admin-2026");
   }, []);
 
+  // Load zones + categories when city changes
+  useEffect(() => {
+    if (!accessGranted) return;
+    fetch(`/api/admin/seed-vendors?city=${encodeURIComponent(city)}`, {
+      headers: { "x-admin-key": "houspire-admin-2026" },
+    })
+      .then((r) => r.json())
+      .then((data: { zones: string[]; categories: string[] }) => {
+        setZones(data.zones || []);
+        setCategories(data.categories || []);
+        setSelectedZones(data.zones?.slice(0, 4) || []);
+        if (!category && data.categories?.length) setCategory(data.categories[0]);
+      })
+      .catch(() => {});
+  }, [city, accessGranted]);
+
   if (!accessGranted) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-xl border border-red-200 p-8 text-center max-w-md">
           <p className="text-red-600 font-semibold text-lg mb-2">Access Denied</p>
-          <p className="text-gray-500 text-sm">Add <code className="bg-gray-100 px-1 rounded">?key=houspire-admin-2026</code> to the URL.</p>
+          <p className="text-gray-500 text-sm">Add <code className="bg-gray-100 px-1 rounded">?key=houspire-admin-2026</code> to URL.</p>
         </div>
       </main>
     );
   }
 
+  const totalInserted = results.reduce((s, r) => s + r.inserted, 0);
+
   async function runSeed() {
+    if (!category || selectedZones.length === 0) return;
     setLoading(true);
     setResults([]);
-    setLog([]);
+    setLog([`Seeding ${category} across ${selectedZones.length} zones in ${city}…`]);
 
-    if (mode === "single") {
-      setLog([`Searching Google Maps for ${category} vendors in ${city}…`]);
-      const res = await fetch("/api/admin/seed-vendors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-key": "houspire-admin-2026" },
-        body: JSON.stringify({ city, category, pincode: pincode || undefined }),
-      });
-      const data = await res.json() as SeedResult & { inserted?: number };
-      setResults([{ category, inserted: data.inserted ?? 0, vendors: data.vendors, error: data.error }]);
-      setLog([data.error ? `✗ ${data.error}` : `✓ ${data.inserted} real vendors saved for ${category} in ${city}`]);
-    } else {
-      const allResults: SeedResult[] = [];
-      for (const cat of CATEGORIES) {
-        setLog((prev) => [...prev, `Searching ${cat} in ${city}…`]);
+    const allResults: ZoneResult[] = [];
+    for (const zone of selectedZones) {
+      setLog((prev) => [...prev, `→ Searching ${zone}…`]);
+      try {
         const res = await fetch("/api/admin/seed-vendors", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-admin-key": "houspire-admin-2026" },
-          body: JSON.stringify({ city, category: cat, pincode: pincode || undefined }),
+          body: JSON.stringify({ city, category, zone }),
         });
-        const data = await res.json() as SeedResult & { inserted?: number };
-        const result = { category: cat, inserted: data.inserted ?? 0, vendors: data.vendors, error: data.error };
-        allResults.push(result);
+        const data = await res.json() as ZoneResult & { inserted?: number };
+        const r: ZoneResult = { zone, category, inserted: data.inserted ?? 0, vendors: data.vendors, error: data.error };
+        allResults.push(r);
         setResults([...allResults]);
-        setLog((prev) => [...prev, data.error ? `  ✗ ${cat}: ${data.error}` : `  ✓ ${cat}: ${data.inserted} vendors`]);
+        setLog((prev) => [...prev, data.error
+          ? `  ✗ ${zone}: ${data.error}`
+          : `  ✓ ${zone}: ${data.inserted} vendors`]);
+      } catch (e) {
+        allResults.push({ zone, category, inserted: 0, error: String(e) });
+        setResults([...allResults]);
+        setLog((prev) => [...prev, `  ✗ ${zone}: ${e}`]);
       }
     }
+    setLog((prev) => [...prev, `Done. ${allResults.reduce((s, r) => s + r.inserted, 0)} total vendors saved.`]);
     setLoading(false);
   }
-
-  const totalInserted = results.reduce((s, r) => s + r.inserted, 0);
 
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="bg-green-900 text-white px-6 py-4 flex items-center gap-4">
         <a href="/" className="text-green-300 hover:text-white text-sm">← Home</a>
         <h1 className="text-xl font-bold">Vendor Data Admin</h1>
-        <span className="text-xs bg-yellow-500 text-black px-2 py-0.5 rounded font-medium">Uses Claude web_search — costs API credits</span>
+        <span className="text-xs bg-yellow-500 text-black px-2 py-0.5 rounded font-medium">Uses Claude web_search</span>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
 
         <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 text-sm text-amber-800">
-          <strong>What this does:</strong> Uses Claude + Google web search to find REAL vendors for each city+category.
-          Replaces seed/unverified rows with actual Google Maps listings. Each category costs ~1 API call.
+          <strong>How this works:</strong> Searches Justdial/Sulekha zone-by-zone within a city.
+          Select 4-6 zones to get 20-30 vendors covering the whole city.
+          Phones locked behind Justdial login are stored as Justdial URLs — users click through.
+          Run once per category per city. ~1 API call per zone.
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-semibold text-gray-900">Seed Real Vendor Data</h2>
+          <h2 className="font-semibold text-gray-900">Seed Vendor Data</h2>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">City</label>
               <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
@@ -104,69 +124,80 @@ export default function VendorAdminPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Pincode (optional)</label>
-              <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                placeholder="e.g. 500034"
-                value={pincode} onChange={(e) => setPincode(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Mode</label>
+              <label className="block text-xs text-gray-500 mb-1">Category ({categories.length} available)</label>
               <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                value={mode} onChange={(e) => setMode(e.target.value as "single" | "all")}>
-                <option value="single">Single category</option>
-                <option value="all">All 7 categories</option>
+                value={category} onChange={(e) => setCategory(e.target.value)}>
+                {categories.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
           </div>
 
-          {mode === "single" && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Category</label>
-              <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                value={category} onChange={(e) => setCategory(e.target.value)}>
-                {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
+          {/* Zone selector */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-2">
+              City Zones to search ({selectedZones.length} selected — each ~20-30 vendors total)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {zones.map((z) => (
+                <button key={z}
+                  onClick={() => setSelectedZones((prev) =>
+                    prev.includes(z) ? prev.filter((x) => x !== z) : [...prev, z]
+                  )}
+                  className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                    selectedZones.includes(z)
+                      ? "bg-green-900 text-white border-green-900"
+                      : "bg-white text-gray-600 border-gray-300 hover:border-green-600"
+                  }`}
+                >
+                  {z}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           <button
             className="bg-green-900 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-800 disabled:opacity-50"
-            disabled={loading}
+            disabled={loading || !category || selectedZones.length === 0}
             onClick={runSeed}
           >
-            {loading ? "⏳ Searching Google Maps…" : `🔍 Fetch Real Vendors — ${mode === "all" ? "All 7 categories" : category}`}
+            {loading
+              ? `⏳ Searching zone ${results.length + 1}/${selectedZones.length}…`
+              : `🔍 Seed ${category} in ${selectedZones.length} zones`}
           </button>
         </div>
 
+        {/* Log */}
         {log.length > 0 && (
-          <div className="bg-gray-900 text-green-400 rounded-xl p-4 font-mono text-xs space-y-0.5">
+          <div className="bg-gray-900 text-green-400 rounded-xl p-4 font-mono text-xs space-y-0.5 max-h-48 overflow-y-auto">
             {log.map((l, i) => <div key={i}>{l}</div>)}
           </div>
         )}
 
+        {/* Results */}
         {results.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900">Results</h2>
-              <span className="text-sm text-green-700 font-medium">{totalInserted} real vendors saved to DB</span>
+              <h2 className="font-semibold text-gray-900">{category} — {city}</h2>
+              <span className="text-sm text-green-700 font-medium">{totalInserted} vendors saved to DB</span>
             </div>
             {results.map((r, i) => (
               <div key={i} className={`border rounded-lg p-3 ${r.error ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">{r.category}</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium">{r.zone}</span>
                   {r.error
                     ? <span className="text-xs text-red-600">✗ {r.error}</span>
                     : <span className="text-xs text-green-700">✓ {r.inserted} vendors</span>}
                 </div>
                 {r.vendors && (
-                  <div className="space-y-1">
+                  <div className="space-y-0.5 mt-1">
                     {r.vendors.map((v, j) => (
-                      <div key={j} className="text-xs text-gray-600 flex items-center gap-2">
+                      <div key={j} className="text-xs text-gray-600 flex items-center gap-2 flex-wrap">
                         <span className="font-medium">{v.vendor}</span>
-                        <span className="text-gray-400">|</span>
-                        <span>{v.phone}</span>
-                        <span className="text-gray-400">|</span>
-                        <span>{v.rating}</span>
+                        <span className="text-gray-400">·</span>
+                        <span>{v.area}</span>
+                        <span className="text-gray-400">·</span>
+                        <span className="text-green-700">{v.phone}</span>
+                        {v.rating && <span className="text-gray-400">· {v.rating}</span>}
                       </div>
                     ))}
                   </div>
