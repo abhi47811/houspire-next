@@ -98,16 +98,18 @@ IMPORTANT:
 - If phone hidden, store the Justdial URL as contact reference
 - Include businesses from all parts of ${zone} area
 
+PRIORITY: Get the FULL ADDRESS (street/locality/pincode) — this is always visible on Justdial without login.
+Phone is often locked — store the Justdial listing URL instead.
+
 Return ONLY this JSON array (no other text):
 [
   {
-    "vendor": "exact business name",
-    "specialty": "brief description of what they sell/do",
+    "vendor": "exact business name from listing",
+    "specialty": "what they sell (brands, speciality)",
+    "full_address": "Shop 12, MG Road, Banjara Hills (500034)",
     "area": "${zone}, ${city}",
-    "lat": 0.0,
-    "lng": 0.0,
     "rating": "4.5 (142)",
-    "phone": "+91 XXXXX XXXXX or justdial.com/... URL"
+    "contact": "+91 XXXXX XXXXX or https://www.justdial.com/... listing URL"
   }
 ]`;
 
@@ -116,6 +118,30 @@ function isAuthorized(req: NextRequest): boolean {
   const queryKey = req.nextUrl.searchParams.get("key");
   return headerKey === "houspire-admin-2026" || queryKey === "houspire-admin-2026";
 }
+
+// Free geocoding via OpenStreetMap Nominatim — no API key needed
+async function geocode(address: string, city: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const query = `${address}, ${city}, India`;
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=in`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "HouspireApp/1.0 (mediashaastra@gmail.com)" },
+    });
+    const data = await res.json() as Array<{ lat: string; lon: string }>;
+    if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    // Fallback: geocode just the zone+city
+    const fallbackUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${city}, India`)}&format=json&limit=1&countrycodes=in`;
+    const fallbackRes = await fetch(fallbackUrl, { headers: { "User-Agent": "HouspireApp/1.0" } });
+    const fallbackData = await fallbackRes.json() as Array<{ lat: string; lon: string }>;
+    if (fallbackData[0]) return { lat: parseFloat(fallbackData[0].lat), lng: parseFloat(fallbackData[0].lon) };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Sleep helper for Nominatim rate limit (1 req/sec)
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // POST: seed one specific city+category combination (one zone at a time)
 export async function POST(req: NextRequest) {
@@ -146,28 +172,35 @@ export async function POST(req: NextRequest) {
     if (!jsonMatch) return NextResponse.json({ error: "No JSON array in response", raw: text.slice(0, 300) }, { status: 422 });
 
     const vendors = JSON.parse(jsonMatch[0]) as Array<{
-      vendor: string; specialty: string; area: string;
-      lat: number; lng: number; rating: string; phone: string;
+      vendor: string; specialty: string; full_address?: string; area: string;
+      rating: string; contact: string;
     }>;
 
     if (!Array.isArray(vendors) || vendors.length === 0) {
       return NextResponse.json({ error: "No vendors parsed", zone: searchZone }, { status: 422 });
     }
 
-    // Insert all vendors (don't delete existing — accumulate across zones)
-    const rows = vendors.map((v) => ({
-      city, category,
-      vendor: v.vendor,
-      specialty: v.specialty,
-      area: v.area || `${searchZone}, ${city}`,
-      lat: v.lat || null,
-      lng: v.lng || null,
-      rating: v.rating || "Unverified",
-      phone: v.phone || "See Justdial",
-      is_verified: false,
-      data_source: `justdial_search_${Date.now()}`,
-      verified_at: null,
-    }));
+    // Geocode each vendor using full_address → Nominatim (free, 1 req/sec limit)
+    const rows = [];
+    for (const v of vendors) {
+      const addressForGeocoding = v.full_address || v.area || `${searchZone}, ${city}`;
+      const coords = await geocode(addressForGeocoding, city);
+      await sleep(1100); // Nominatim rate limit: 1 req/sec
+
+      rows.push({
+        city, category,
+        vendor: v.vendor,
+        specialty: v.specialty,
+        area: v.full_address || v.area || `${searchZone}, ${city}`,
+        lat: coords?.lat || null,
+        lng: coords?.lng || null,
+        rating: v.rating || "Unverified",
+        phone: v.contact || "See Justdial",
+        is_verified: false,
+        data_source: `justdial_nominatim_${Date.now()}`,
+        verified_at: null,
+      });
+    }
 
     const { error } = await db.from("vendors_db").insert(rows);
     if (error) throw error;
