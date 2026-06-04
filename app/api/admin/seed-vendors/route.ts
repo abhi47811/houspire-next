@@ -31,7 +31,7 @@ export const VENDOR_CATEGORIES = [
 ];
 
 // City zones to search within — ensures city-wide coverage for pincode-based filtering
-const CITY_ZONES: Record<string, string[]> = {
+export const CITY_ZONES: Record<string, string[]> = {
   "Hyderabad": ["Banjara Hills", "Jubilee Hills", "Kondapur", "Kukatpally", "Secunderabad", "Dilsukhnagar", "LB Nagar", "Uppal"],
   "Bangalore": ["Indiranagar", "Koramangala", "Whitefield", "Jayanagar", "Malleswaram", "HSR Layout", "Yelahanka", "JP Nagar"],
   "Mumbai": ["Andheri West", "Bandra", "Thane", "Borivali", "Chembur", "Mulund", "Goregaon", "Powai"],
@@ -78,38 +78,32 @@ function getSearchTerms(category: string): string[] {
 }
 
 const SEARCH_PROMPT = (city: string, zone: string, category: string, searchTerms: string[]) => `
-Search Justdial.com and Sulekha.com to find businesses in ${zone}, ${city} for: ${category}
+Search Justdial.com for businesses in ${zone}, ${city} specializing in: ${category}
 
-Search these specific queries on Justdial (justdial.com/${city.toLowerCase().replace(/ /g, "-")}):
-${searchTerms.map(t => `- "${t} ${zone} ${city}"`).join("\n")}
+Step 1 — Search Justdial with these queries:
+${searchTerms.map(t => `- site:justdial.com "${t}" "${zone}" "${city}"`).join("\n")}
 
-For EACH business listing found, extract:
+Step 2 — For each business found, OPEN the Justdial listing page and extract:
 1. Business name (exact as listed)
-2. Locality/area in ${city}
-3. Justdial listing URL (format: justdial.com/...)
-4. Phone if visible on page (format: +91 XXXXX XXXXX), else "See Justdial"
-5. Rating (e.g. "4.2") and review count (e.g. "(142)") if shown
-6. Brief description of specialty
+2. FULL ADDRESS — this is ALWAYS visible on the listing page without login
+   Example: "Door No 8-2-502/1/0, Road No 7, Banjara Hills, Hyderabad-500034"
+   The address appears in the Contact section on the right side of the listing
+3. Rating and review count (e.g. "4.0 (354 Ratings)")
+4. Phone number if shown without clicking (some listings show it directly)
+5. What they sell/specialty (from Products section or description)
 
-IMPORTANT:
-- Find 5-8 REAL businesses per search
-- Only businesses actually listed on Justdial/Sulekha for ${city}
-- Never invent business names, phones, or ratings
-- If phone hidden, store the Justdial URL as contact reference
-- Include businesses from all parts of ${zone} area
+DO NOT store Justdial URLs — extract the REAL address from each listing page.
+DO NOT invent or guess addresses — only use what you read from the listing.
 
-PRIORITY: Get the FULL ADDRESS (street/locality/pincode) — this is always visible on Justdial without login.
-Phone is often locked — store the Justdial listing URL instead.
-
-Return ONLY this JSON array (no other text):
+Find 5-8 real businesses. Return ONLY this JSON array:
 [
   {
-    "vendor": "exact business name from listing",
-    "specialty": "what they sell (brands, speciality)",
-    "full_address": "Shop 12, MG Road, Banjara Hills (500034)",
+    "vendor": "Kajaria Ceramics Ltd",
+    "specialty": "Vitrified tiles, ceramic tiles, Kajaria brand dealer",
+    "full_address": "Door No 8-2-502/1/0, Uma Aishwarya House, Below Gemini TV Office, Road No 7, Ag Road, Banjara Hills, Hyderabad-500034",
     "area": "${zone}, ${city}",
-    "rating": "4.5 (142)",
-    "contact": "+91 XXXXX XXXXX or https://www.justdial.com/... listing URL"
+    "rating": "4.0 (354)",
+    "contact": "+91 XXXXX XXXXX or NA"
   }
 ]`;
 
