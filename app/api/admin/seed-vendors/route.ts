@@ -13,30 +13,38 @@ const CATEGORIES = [
 ];
 
 const SEARCH_PROMPT = (city: string, category: string, pincode?: string) => `
-Search Google Maps and local directories for REAL, currently operating vendors in ${city}${pincode ? ` near ${pincode}` : ""}
-specializing in interior design materials for: ${category}
+Search Justdial, Sulekha, and IndiaMART for REAL vendors in ${city}${pincode ? ` near ${pincode}` : ""} for: ${category}
 
-Find 3-5 vendors. For each one search Google Maps directly to get:
-- Real business name
-- Real area/locality
-- Real phone number (from Google Maps listing)
-- Real Google rating and review count
-- Lat/lng coordinates
+These directories have real Indian business phone numbers. Search:
+1. justdial.com — search "${category} ${city}" and click listings to get phone
+2. sulekha.com — search "${category} services ${city}"
+3. indiamart.com — search "${category} dealers ${city}"
+
+Specific search terms for ${category}:
+- Flooring: "tile dealers ${city}", "Kajaria tiles ${city} justdial", "vitrified tile showroom ${city}"
+- Carpentry / Wardrobe: "modular wardrobe ${city} justdial", "interior carpenter ${city}", "wardrobe manufacturer ${city}"
+- Electrical: "Legrand dealer ${city}", "electrical shop ${city} justdial", "switches sockets ${city}"
+- Lighting / Fans: "Atomberg fan dealer ${city}", "LED lights ${city} justdial", "ceiling fan dealer ${city}"
+- Hardware: "Hettich dealer ${city}", "cabinet hardware ${city}", "furniture fittings ${city}"
+- HVAC: "Daikin AC dealer ${city} justdial", "air conditioner dealer ${city}", "AC service center ${city}"
+- Painting: "Asian Paints dealer ${city} justdial", "paint shop ${city}", "Berger paints ${city}"
+- Furniture: "Godrej Interio ${city}", "furniture showroom ${city} justdial", "sofa set ${city}"
+- Bathroom Fixtures: "Jaquar dealer ${city} justdial", "bathroom fittings ${city}", "sanitaryware ${city}"
+- Soft Furnishings: "curtain shop ${city} justdial", "D Decor ${city}", "blinds curtains ${city}"
+
+Find 3-5 vendors. For EACH vendor extract from Justdial/Sulekha listing:
+- Real business name (as listed)
+- Locality/area (as listed)
+- Phone number (directly from listing — Justdial shows numbers after click)
+- Rating and review count if shown
+- Full address for lat/lng estimation
 
 STRICT RULES:
-- ONLY include businesses that actually appear in Google Maps search results
-- If no phone is on Google Maps, write "NA - visit showroom"
-- If rating not found, write "check Google Maps"
-- Do not invent or guess any details
-
-For ${category} in ${city}, search queries like:
-- "${category} dealer ${city}"
-- "Kajaria tiles ${city}" (for flooring)
-- "Hettich dealer ${city}" (for hardware)
-- "Atomberg fan dealer ${city}" (for lighting)
-- "Daikin AC dealer ${city}" (for HVAC)
-- "Asian Paints dealer ${city}" (for painting)
-- "modular wardrobe ${city}" (for carpentry)
+- ONLY businesses from actual Justdial/Sulekha/IndiaMART listings
+- Phone format: "+91 XXXXX XXXXX" — use actual number from listing
+- If phone hidden behind login, write "NA - check justdial.com"
+- Never invent or guess phone numbers
+- If < 3 businesses found, note that in the JSON
 
 Return ONLY this JSON array, no other text:
 [
