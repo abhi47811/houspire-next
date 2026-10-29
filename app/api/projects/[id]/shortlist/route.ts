@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
+import { requireUser } from "@/lib/supabase-server";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const authError = await requireUser();
+  if (authError) return authError;
   const { id } = await params;
   const { vendor_name, category } = await req.json() as { vendor_name: string; category: string };
 
@@ -25,6 +28,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const authError = await requireUser();
+  if (authError) return authError;
   const { id } = await params;
   const { vendor_name } = await req.json() as { vendor_name: string };
 

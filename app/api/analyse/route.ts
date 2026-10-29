@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeAllRenders, analyzeFloorPlan } from "@/lib/room-analyzer";
+import { requireUser } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
+  const authError = await requireUser();
+  if (authError) return authError;
   const formData = await req.formData();
   const files = formData.getAll("images") as File[];
   const floorPlanFile = formData.get("floorplan") as File | null;

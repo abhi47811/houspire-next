@@ -6,6 +6,7 @@ import { generateVendors } from "@/lib/vendor-finder";
 import { saveProject } from "@/lib/db";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { RoomAnalysis } from "@/lib/types";
+import { requireUser } from "@/lib/supabase-server";
 
 // Priority categories to auto-seed when a new city is encountered
 const PRIORITY_CATEGORIES = [
@@ -47,6 +48,8 @@ async function autoSeedVendorsIfNeeded(city: string, baseUrl: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requireUser();
+  if (authError) return authError;
   const { rooms, city, pincode, tier, client_name, includeGST }: {
     rooms: RoomAnalysis[];
     city: string;
