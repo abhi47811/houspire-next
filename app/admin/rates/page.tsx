@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import Link from "next/link";
 
 const CATEGORIES = [
   "Carpentry / Ceiling", "Flooring / Walls", "Lighting",
@@ -18,24 +19,42 @@ interface VerifyResult {
 }
 
 export default function RatesAdminPage() {
-  const [accessGranted, setAccessGranted] = useState(false);
+  const [adminKey, setAdminKey] = useState("");
+  const [keyInput, setKeyInput] = useState("");
   const [category, setCategory] = useState("Flooring / Walls");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<VerifyResult[]>([]);
   const [log, setLog] = useState<string[]>([]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setAccessGranted(params.get("key") === "houspire-admin-2026");
-  }, []);
+  const accessGranted = adminKey !== "";
 
   if (!accessGranted) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white rounded-xl border border-red-200 p-8 text-center max-w-md">
-          <p className="text-red-600 font-semibold text-lg mb-2">Access Denied</p>
-          <p className="text-gray-500 text-sm">Add <code className="bg-gray-100 px-1 rounded">?key=houspire-admin-2026</code> to the URL.</p>
-        </div>
+        <form
+          className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setAdminKey(keyInput.trim());
+          }}
+        >
+          <h1 className="text-lg font-semibold text-gray-900">Rate Verification Admin</h1>
+          <p className="text-gray-500 text-sm">Enter the admin key to continue.</p>
+          <input
+            type="password"
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            placeholder="Admin key"
+            autoComplete="off"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            className="w-full bg-green-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-800"
+          >
+            Unlock
+          </button>
+        </form>
       </main>
     );
   }
@@ -46,7 +65,7 @@ export default function RatesAdminPage() {
     setLog([`Searching live prices for ${category}…`]);
 
     const res = await fetch(`/api/admin/verify-rates?category=${encodeURIComponent(category)}`, {
-      headers: { "x-admin-key": "houspire-admin-2026" },
+      headers: { "x-admin-key": adminKey },
     });
     const data = await res.json() as { results: VerifyResult[] };
     setResults(data.results ?? []);
@@ -60,7 +79,7 @@ export default function RatesAdminPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="bg-green-900 text-white px-6 py-4 flex items-center gap-4">
-        <a href="/" className="text-green-300 hover:text-white text-sm">← Home</a>
+        <Link href="/" className="text-green-300 hover:text-white text-sm">← Home</Link>
         <h1 className="text-xl font-bold">Rate Verification Admin</h1>
         <span className="text-xs bg-yellow-500 text-black px-2 py-0.5 rounded font-medium">Uses Claude web_search</span>
       </div>
