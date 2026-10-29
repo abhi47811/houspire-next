@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { CITIES } from "@/lib/config";
 
 interface VendorResult {
@@ -19,7 +20,8 @@ interface ZoneResult {
 }
 
 export default function VendorAdminPage() {
-  const [accessGranted, setAccessGranted] = useState(false);
+  const [adminKey, setAdminKey] = useState("");
+  const [keyInput, setKeyInput] = useState("");
   const [city, setCity] = useState("Hyderabad");
   const [category, setCategory] = useState("");
   const [runAllCategories, setRunAllCategories] = useState(false);
@@ -30,16 +32,13 @@ export default function VendorAdminPage() {
   const [results, setResults] = useState<ZoneResult[]>([]);
   const [log, setLog] = useState<string[]>([]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setAccessGranted(params.get("key") === "houspire-admin-2026");
-  }, []);
+  const accessGranted = adminKey !== "";
 
   // Load zones + categories when city changes
   useEffect(() => {
     if (!accessGranted) return;
     fetch(`/api/admin/seed-vendors?city=${encodeURIComponent(city)}`, {
-      headers: { "x-admin-key": "houspire-admin-2026" },
+      headers: { "x-admin-key": adminKey },
     })
       .then((r) => r.json())
       .then((data: { zones: string[]; categories: string[] }) => {
@@ -49,15 +48,35 @@ export default function VendorAdminPage() {
         if (!category && data.categories?.length) setCategory(data.categories[0]);
       })
       .catch(() => {});
-  }, [city, accessGranted]);
+  }, [city, accessGranted, adminKey]);
 
   if (!accessGranted) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white rounded-xl border border-red-200 p-8 text-center max-w-md">
-          <p className="text-red-600 font-semibold text-lg mb-2">Access Denied</p>
-          <p className="text-gray-500 text-sm">Add <code className="bg-gray-100 px-1 rounded">?key=houspire-admin-2026</code> to URL.</p>
-        </div>
+        <form
+          className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setAdminKey(keyInput.trim());
+          }}
+        >
+          <h1 className="text-lg font-semibold text-gray-900">Vendor Data Admin</h1>
+          <p className="text-gray-500 text-sm">Enter the admin key to continue.</p>
+          <input
+            type="password"
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            placeholder="Admin key"
+            autoComplete="off"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            className="w-full bg-green-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-800"
+          >
+            Unlock
+          </button>
+        </form>
       </main>
     );
   }
@@ -70,7 +89,7 @@ export default function VendorAdminPage() {
       try {
         const res = await fetch("/api/admin/seed-vendors", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-admin-key": "houspire-admin-2026" },
+          headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
           body: JSON.stringify({ city, category: cat, zone }),
         });
         const data = await res.json() as ZoneResult & { inserted?: number; error?: unknown };
@@ -115,7 +134,7 @@ export default function VendorAdminPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="bg-green-900 text-white px-6 py-4 flex items-center gap-4">
-        <a href="/" className="text-green-300 hover:text-white text-sm">← Home</a>
+        <Link href="/" className="text-green-300 hover:text-white text-sm">← Home</Link>
         <h1 className="text-xl font-bold">Vendor Data Admin</h1>
         <span className="text-xs bg-yellow-500 text-black px-2 py-0.5 rounded font-medium">Uses Claude web_search</span>
       </div>

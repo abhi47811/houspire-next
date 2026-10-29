@@ -17,6 +17,8 @@ const PRIORITY_CATEGORIES = [
 ];
 
 async function autoSeedVendorsIfNeeded(city: string, baseUrl: string) {
+  const adminKey = process.env.ADMIN_API_KEY;
+  if (!adminKey) return; // No admin key configured — skip background seeding
   try {
     const db = getSupabaseClient();
     // Check if this city already has vendor data
@@ -36,7 +38,7 @@ async function autoSeedVendorsIfNeeded(city: string, baseUrl: string) {
       for (const zone of topZones) {
         await fetch(`${baseUrl}/api/admin/seed-vendors`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-admin-key": "houspire-admin-2026" },
+          headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
           body: JSON.stringify({ city, category, zone }),
         });
       }

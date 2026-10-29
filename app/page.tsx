@@ -28,35 +28,6 @@ export default function HomePage() {
       .catch(() => setDataQuality(null));
   }, [city]);
 
-  // Pre-fill from URL params when coming from "Edit / Redo" on Past Projects page
-  // Also loads saved BOQ + vendor data from DB so downloads work immediately
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const p = new URLSearchParams(window.location.search);
-    const reloadId = p.get("reload");
-    if (reloadId) {
-      if (p.get("client")) setClientName(p.get("client")!);
-      if (p.get("city") && CITIES.includes(p.get("city")!)) setCity(p.get("city")!);
-      if (p.get("pincode")) setPincode(p.get("pincode")!);
-      if (p.get("tier") === "Premium") setTier("Premium");
-      // Load saved BOQ + vendor data from DB
-      fetch(`/api/projects/${reloadId}/boq`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.boq_rows?.length > 0) {
-            setBoqRows(data.boq_rows);
-            setEditedBoqRows(data.boq_rows);
-            setProjectId(reloadId);
-            setStatus(`Loaded ${data.boq_rows.length} saved BOQ items. Upload new renders to regenerate.`);
-          }
-          if (data.vendors?.length > 0) setVendors(data.vendors);
-        })
-        .catch(() => {});
-      // Clean URL without reloading
-      window.history.replaceState({}, "", "/");
-    }
-  }, []);
-
   const [files, setFiles] = useState<File[]>([]);
   const [floorPlan, setFloorPlan] = useState<File | null>(null);
   const [analyses, setAnalyses] = useState<RoomAnalysis[]>([]);
@@ -72,6 +43,40 @@ export default function HomePage() {
   const [editedBoqRows, setEditedBoqRows] = useState<BOQRow[]>([]);
   const [boqSaved, setBoqSaved] = useState(false);
   const [vendors, setVendors] = useState<VendorRow[]>([]);
+
+  // Pre-fill from URL params when coming from "Edit / Redo" on Past Projects page
+  // Also loads saved BOQ + vendor data from DB so downloads work immediately
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    const reloadId = p.get("reload");
+    if (!reloadId) return;
+    const nextClient = p.get("client");
+    const nextCity = p.get("city");
+    const nextPincode = p.get("pincode");
+    const nextTier = p.get("tier");
+    // Clean URL without reloading
+    window.history.replaceState({}, "", "/");
+    // Load saved BOQ + vendor data from DB, then pre-fill the form from the URL params
+    fetch(`/api/projects/${reloadId}/boq`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.boq_rows?.length > 0) {
+          setBoqRows(data.boq_rows);
+          setEditedBoqRows(data.boq_rows);
+          setProjectId(reloadId);
+          setStatus(`Loaded ${data.boq_rows.length} saved BOQ items. Upload new renders to regenerate.`);
+        }
+        if (data.vendors?.length > 0) setVendors(data.vendors);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (nextClient) setClientName(nextClient);
+        if (nextCity && CITIES.includes(nextCity)) setCity(nextCity);
+        if (nextPincode) setPincode(nextPincode);
+        if (nextTier === "Premium") setTier("Premium");
+      });
+  }, []);
 
   // Phase filter for BOQ table
   const [selectedPhase, setSelectedPhase] = useState<string>(ALL_PHASES);
@@ -266,7 +271,7 @@ export default function HomePage() {
                 ✓ {city}: {dataQuality.vendors.highQuality} verified vendors
               </span>
             ) : (
-              <a href={`/admin/vendors?key=houspire-admin-2026`}
+              <a href="/admin/vendors"
                 className="text-xs bg-amber-500 text-black px-2 py-1 rounded-full hover:bg-amber-400 font-medium">
                 ⚠ {city}: {dataQuality.vendors.highQuality}/{dataQuality.vendors.total} vendors verified — seed more
               </a>

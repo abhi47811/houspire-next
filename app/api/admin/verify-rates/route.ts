@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAnthropicClient } from "@/lib/anthropic";
 import { getSupabaseClient } from "@/lib/supabase";
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 // Verify a specific rate item by searching the brand website
 const RATE_PROMPT = (item: string, brand: string | null, sourceUrl: string | null) => `
@@ -26,14 +27,8 @@ Return ONLY this JSON, no other text:
 }
 `;
 
-function isAuthorized(req: NextRequest): boolean {
-  const headerKey = req.headers.get("x-admin-key");
-  const queryKey = req.nextUrl.searchParams.get("key");
-  return headerKey === "houspire-admin-2026" || queryKey === "houspire-admin-2026";
-}
-
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!isAdminAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -93,7 +88,7 @@ export async function POST(req: NextRequest) {
 
 // GET: verify all rates for a category
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!isAdminAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

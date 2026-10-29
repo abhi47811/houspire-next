@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAnthropicClient } from "@/lib/anthropic";
 import { getSupabaseClient } from "@/lib/supabase";
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export const VENDOR_CATEGORIES = [
   "Vitrified Tiles & Flooring",
@@ -119,12 +120,6 @@ For each business return this exact JSON array (no other text):
 [{"vendor":"name","specialty":"what they sell","full_address":"locality, ${city}","area":"${zone}, ${city}","rating":"","contact":""}]
 `;
 
-function isAuthorized(req: NextRequest): boolean {
-  const headerKey = req.headers.get("x-admin-key");
-  const queryKey = req.nextUrl.searchParams.get("key");
-  return headerKey === "houspire-admin-2026" || queryKey === "houspire-admin-2026";
-}
-
 // Free geocoding via OpenStreetMap Nominatim — no API key needed
 async function geocode(address: string, city: string): Promise<{ lat: number; lng: number } | null> {
   try {
@@ -151,7 +146,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // POST: seed one specific city+category combination (one zone at a time)
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdminAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { city, category, zone } = await req.json() as { city: string; category: string; zone?: string };
   if (!city || !category) return NextResponse.json({ error: "city and category required" }, { status: 400 });
@@ -260,7 +255,7 @@ export async function POST(req: NextRequest) {
 
 // GET: return available zones for a city + categories list
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdminAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const city = req.nextUrl.searchParams.get("city") || "";
   const zones = CITY_ZONES[city] || DEFAULT_ZONES;
