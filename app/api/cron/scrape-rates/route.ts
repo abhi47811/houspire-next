@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyCronSecret } from "@/lib/cron-auth";
 import { getSupabaseClient } from "@/lib/supabase";
 import { getAnthropicClient } from "@/lib/anthropic";
 
-// Protected by CRON_SECRET header
-export async function POST(req: NextRequest) {
-  const secret = req.headers.get("x-cron-secret");
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+// Vercel cron invokes this path with GET (see vercel.json).
+export async function GET(req: NextRequest) {
+  const authError = verifyCronSecret(req);
+  if (authError) return authError;
 
   const db = getSupabaseClient();
   const client = getAnthropicClient();
