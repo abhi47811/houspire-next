@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { BOQRow } from "@/lib/types";
+import { requireUser } from "@/lib/supabase-server";
 
 // GET: return saved BOQ rows + vendors for a project (used by Edit/Redo flow)
 export async function GET(
@@ -23,6 +24,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const authError = await requireUser();
+  if (authError) return authError;
   const { id } = await params;
   const { rows }: { rows: BOQRow[] } = await req.json();
 

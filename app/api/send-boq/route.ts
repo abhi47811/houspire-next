@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { loadProject } from "@/lib/db";
+import { requireUser } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
+  const authError = await requireUser();
+  if (authError) return authError;
   const { projectId, recipientEmail } = await req.json() as { projectId: string; recipientEmail: string };
 
   if (!process.env.RESEND_API_KEY) {
